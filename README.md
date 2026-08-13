@@ -32,6 +32,10 @@ agreed-upon result is ever stored.
    original prompt and the confidence the consensus round agreed on.
 5. **Deploy** — your own connected wallet deploys the generated contract
    directly to GenLayer, and VULCAN records the result via `mark_deployed`.
+6. **Browse the dashboard** — every generation ever forged, read live from
+   the contract (no off-chain database): filter to your own forges or
+   everyone's, search, sort, open full source in a detail drawer, deploy
+   straight from there, or forge a variant of an existing prompt.
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full consensus
 design (including two platform corrections made after checking the

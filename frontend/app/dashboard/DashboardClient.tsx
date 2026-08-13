@@ -1,0 +1,237 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { useSearchParams } from "next/navigation";
+import { Compass, Flame, Loader2, Rocket, Wallet } from "lucide-react";
+import { AppNav } from "@/components/AppNav";
+import { ParticleField } from "@/components/ParticleField";
+import { DashboardStats } from "@/components/DashboardStats";
+import { DashboardFilters } from "@/components/DashboardFilters";
+import { GenerationCard } from "@/components/GenerationCard";
+import { GenerationDetail } from "@/components/GenerationDetail";
+import { EmptyState } from "@/components/EmptyState";
+import { Button } from "@/components/ui/button";
+import { useVulcanClient, fetchGenerationCount } from "@/lib/genlayer-client";
+import {
+  DASHBOARD_BATCH_SIZE,
+  computeStats,
+  fetchGenerationsWindow,
+  filterAndSortEntries,
+  nextIdWindow,
+  type DashboardEntry,
+  type DashboardSort,
+  type DashboardTab,
+} from "@/lib/dashboard-data";
+
+export function DashboardClient() {
+  const { client, address } = useVulcanClient();
+  const searchParams = useSearchParams();
+  const openId = searchParams.get("open");
+
+  const [totalCount, setTotalCount] = useState<number | null>(null);
+  const [entries, setEntries] = useState<DashboardEntry[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [tab, setTab] = useState<DashboardTab>("all");
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<DashboardSort>("newest");
+  const [selected, setSelected] = useState<DashboardEntry | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [autoOpenedFor, setAutoOpenedFor] = useState<string | null>(null);
+
+  const loadInitial = useCallback(async () => {
+    if (!client) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const count = await fetchGenerationCount(client);
+      setTotalCount(count);
+      const ids = nextIdWindow(count, 0);
+      const batch = await fetchGenerationsWindow(client, ids);
+      setEntries(batch);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load generations.");
+    } finally {
+      setLoading(false);
+    }
+  }, [client]);
+
+  useEffect(() => {
+    loadInitial();
+  }, [loadInitial]);
+
+  // Deep-link support: ?open=<id> from the post-generate toast opens that
+  // generation's detail drawer as soon as it shows up in a loaded batch
+  // (it's always the newest, so it's in the very first one).
+  useEffect(() => {
+    if (!openId || openId === autoOpenedFor) return;
+    const match = entries.find((e) => e.id === openId);
+    if (match) {
+      setSelected(match);
+      setDetailOpen(true);
+      setAutoOpenedFor(openId);
+    }
+  }, [openId, entries, autoOpenedFor]);
+
+  async function loadMore() {
+    if (!client || totalCount === null) return;
+    setLoadingMore(true);
+    try {
+      const ids = nextIdWindow(totalCount, entries.length);
+      const batch = await fetchGenerationsWindow(client, ids);
+      setEntries((prev) => [...prev, ...batch]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load more generations.");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  function handleDeployed(generationId: string, deployedAddress: string) {
+    setEntries((prev) => prev.map((e) => (e.id === generationId ? { ...e, deployedAddress } : e)));
+    setSelected((prev) => (prev && prev.id === generationId ? { ...prev, deployedAddress } : prev));
+  }
+
+  const stats = computeStats(entries, totalCount ?? 0, address);
+  const visible = filterAndSortEntries(entries, { tab, search, sort, myAddress: address });
+  const hasMore = totalCount !== null && entries.length < totalCount;
+
+  return (
+    <div className="relative flex min-h-screen flex-col overflow-hidden">
+      <ParticleField state="idle" />
+      <AppNav />
+
+      <main className="relative z-10 mx-auto w-full max-w-5xl flex-1 px-6 py-8 sm:px-10">
+        <div className="mb-6">
+          <h1 className="font-serif text-3xl italic text-text-primary">Dashboard</h1>
+          <p className="mt-1 text-sm text-text-secondary">
+            Every generation here is a real multi-validator consensus decision, read live from Vulcan
+            on-chain — nothing on this page is cached off-chain.
+          </p>
+        </div>
+
+        {!address ? (
+          <EmptyState
+            icon={Wallet}
+            title="Connect your wallet"
+            description="Connect to see your own forges and deploy directly from here."
+          />
+        ) : (
+          <>
+            <DashboardStats stats={stats} onRefresh={loadInitial} refreshing={loading} />
+
+            <div className="my-6">
+              <DashboardFilters
+                tab={tab}
+                onTabChange={setTab}
+                search={search}
+                onSearchChange={setSearch}
+                sort={sort}
+                onSortChange={setSort}
+              />
+            </div>
+
+            {error && <p className="mb-4 font-mono text-xs text-danger">{error}</p>}
+
+            {loading && entries.length === 0 ? (
+              <SkeletonGrid />
+            ) : visible.length === 0 ? (
+              <EmptyStateForTab tab={tab} totalCount={totalCount ?? 0} />
+            ) : (
+              <>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <AnimatePresence>
+                    {visible.map((entry) => (
+                      <GenerationCard
+                        key={entry.id}
+                        entry={entry}
+                        myAddress={address}
+                        onClick={() => {
+                          setSelected(entry);
+                          setDetailOpen(true);
+                        }}
+                      />
+                    ))}
+                  </AnimatePresence>
+                </div>
+
+                {hasMore && tab === "all" && !search && (
+                  <div className="mt-6 flex justify-center">
+                    <Button variant="outline" onClick={loadMore} disabled={loadingMore}>
+                      {loadingMore ? <Loader2 size={14} className="animate-spin" /> : null}
+                      {loadingMore
+                        ? "Loading…"
+                        : `Load ${Math.min(DASHBOARD_BATCH_SIZE, totalCount! - entries.length)} more`}
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        )}
+      </main>
+
+      <GenerationDetail
+        entry={selected}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        client={client}
+        onDeployed={handleDeployed}
+      />
+    </div>
+  );
+}
+
+function EmptyStateForTab({ tab, totalCount }: { tab: DashboardTab; totalCount: number }) {
+  if (tab === "mine") {
+    return (
+      <EmptyState
+        icon={Flame}
+        title="No forges yet"
+        description="You haven't forged a contract yet — describe one and watch consensus reach a decision on it."
+        actionLabel="Create your first forge"
+        href="/"
+      />
+    );
+  }
+  if (tab === "deployed") {
+    return (
+      <EmptyState
+        icon={Rocket}
+        title="Nothing deployed yet"
+        description="Once a generation clears the confidence threshold, you can deploy it straight from its detail view."
+      />
+    );
+  }
+  return (
+    <EmptyState
+      icon={Compass}
+      title={totalCount === 0 ? "VULCAN is quiet so far" : "No matches"}
+      description={
+        totalCount === 0
+          ? "Nobody has forged a contract yet. Be the first."
+          : "Try a different search or widen the current tab."
+      }
+      actionLabel={totalCount === 0 ? "Forge the first one" : undefined}
+      href={totalCount === 0 ? "/" : undefined}
+    />
+  );
+}
+
+function SkeletonGrid() {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {Array.from({ length: 6 }, (_, i) => (
+        <motion.div
+          key={i}
+          animate={{ opacity: [0.4, 0.8, 0.4] }}
+          transition={{ duration: 1.8, repeat: Infinity, delay: i * 0.08 }}
+          className="glass-panel h-32 rounded-xl"
+        />
+      ))}
+    </div>
+  );
+}

@@ -29,7 +29,7 @@ node scripts/deploy.mjs bradbury
 This deploys `contracts/Vulcan.py`, waits for consensus, and writes the
 resulting address into `contracts/addresses.json`.
 
-Optionally seed a few example generations so `/history` isn't empty:
+Optionally seed a few example generations so the dashboard isn't empty:
 
 ```bash
 node scripts/seed.mjs bradbury
@@ -54,9 +54,30 @@ rather than a simulated animation.
 
 ## 4. Deploy a generated contract
 
-From the "Finalize" stage, "Deploy this contract" sends the generated
-source as a real GenLayer deploy transaction from your own connected
-wallet, then records the resulting address back onto `Vulcan` via
-`mark_deployed`. This is only available for generations whose confidence
-cleared the consensus threshold (0.55) — `mark_deployed` enforces this
-on-chain regardless of what the UI shows.
+From the "Finalize" stage (or a generation's detail drawer on the
+dashboard), "Deploy this contract" sends the generated source as a real
+GenLayer deploy transaction from your own connected wallet, then records
+the resulting address back onto `Vulcan` via `mark_deployed`. This is only
+available for generations whose confidence cleared the consensus threshold
+(0.55) — `mark_deployed` enforces this on-chain regardless of what the UI
+shows.
+
+## 5. Browse the dashboard
+
+`/dashboard` reads live from `Vulcan` — `get_count`, `get_generation`, and
+`get_deployed`, batched 16 at a time, newest first ("Load more" fetches
+further back). No off-chain database is involved, so what you see is
+exactly what's on-chain right now:
+
+- **My Forges / All Forges / Deployed only** tabs, a search box, and a sort
+  dropdown, all client-side over whatever's currently loaded.
+- Click a card to open its full source (copy button, syntax-highlighted),
+  deploy it if it hasn't been already, or **Forge a variant** — a deep link
+  back to the main page with the original prompt pre-filled.
+- After forging, a toast links straight back to the new entry's detail
+  view via `/dashboard?open=<id>`.
+
+Because `My generations` / `Deployed` / `My avg. confidence` are computed
+from the loaded batch (not a full history scan), they're labeled "of N
+loaded" and fill in further as you click "Load more" — only `Total
+generations` is always exact.

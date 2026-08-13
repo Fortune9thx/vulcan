@@ -13,12 +13,14 @@ export function PromptStage({
   onSubmit,
   disabled,
   disabledReason,
+  defaultPrompt,
 }: {
   onSubmit: (prompt: string) => void;
   disabled?: boolean;
   disabledReason?: string;
+  defaultPrompt?: string;
 }) {
-  const [prompt, setPrompt] = useState("");
+  const [prompt, setPrompt] = useState(defaultPrompt ?? "");
   const length = prompt.trim().length;
   const valid = length >= MIN_LENGTH && length <= MAX_LENGTH;
 
@@ -34,6 +36,10 @@ export function PromptStage({
         <h1 className="font-serif text-5xl italic amber-gradient-text sm:text-6xl">VULCAN</h1>
         <p className="mt-3 font-mono text-sm text-text-secondary">
           Describe it. Forge it. Deploy it under consensus.
+        </p>
+        <p className="mx-auto mt-2 max-w-md text-xs text-text-muted">
+          Every forge is a real multi-validator consensus decision — five GenLayer validators
+          independently check the result, and it&apos;s stored permanently on-chain, not in a database.
         </p>
       </div>
 

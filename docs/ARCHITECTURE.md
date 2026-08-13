@@ -103,3 +103,40 @@ a contract-to-contract call), and once that succeeds the frontend calls
 stored confidence against the same threshold before accepting the address,
 so it can't be used to mark a low-confidence generation as deployed even
 if the frontend's own guard were bypassed.
+
+## Dashboard: on-chain-only, batched
+
+`/dashboard` (`frontend/app/dashboard/DashboardClient.tsx`) is a read
+surface over the exact same three view methods the forge flow already
+uses (`get_count`, `get_generation`, `get_deployed`) — there is no
+off-chain database or indexer behind it, deliberately. Generation ids are
+sequential and assigned in `generate()` itself, so the dashboard can walk
+backwards from `get_count() - 1` without needing an index: `lib/dashboard-
+data.ts`'s `nextIdWindow` computes a batch of ids, `fetchGenerationsWindow`
+resolves them with `Promise.all`, and "Load more" just extends the window
+further back. The top stats bar (`My generations`, `Deployed`, `My avg.
+confidence`) is computed from whatever's currently loaded, not a full scan
+of every generation ever made — only `Total generations` (a single
+`get_count()` call) is a true global figure. Scanning the entire history
+up front to make the other three exact would defeat the point of batched
+loading, so they're labeled "of N loaded" and grow more accurate as more
+batches load. This is a deliberate scoping choice, not an oversight.
+
+The "Forge a variant" link and the post-generate "View in Dashboard" toast
+both use a plain query param (`/?prompt=...`, `/dashboard?open=<id>`)
+rather than any client-side store — consistent with keeping all real state
+on-chain and treating the URL as the only piece of client state worth
+persisting.
+
+## Contract addresses
+
+VULCAN has been deployed twice on Bradbury as the generation prompt was
+strengthened (contracts are immutable once deployed, so a prompt change
+requires a fresh instance, not an upgrade):
+
+- `0x135E3Fe73A0Eab53727E598459BceB22ec5BF57D` — original prompt, superseded.
+- `0xf50543E8e15f4e09E7aF9D143549F165FA86F40d` — current, strengthened
+  prompt (idiomatic storage-declaration guidance, an explicit non-determinism-
+  boundary rule, and a minimal reference example). Both are recorded in
+  `contracts/addresses.json`; the frontend only ever talks to the current one
+  via `NEXT_PUBLIC_VULCAN_CONTRACT_ADDRESS`.
