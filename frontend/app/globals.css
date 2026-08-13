@@ -1,0 +1,125 @@
+@import "tailwindcss";
+
+:root {
+  --color-void: #050505;
+  --color-void-raised: #0b0b0d;
+  --color-panel: #101012;
+  --color-border-glow: rgba(245, 158, 11, 0.16);
+  --color-amber-100: #fde9c8;
+  --color-amber-400: #f59e0b;
+  --color-amber-500: #d97706;
+  --color-amber-600: #b45309;
+  --color-text-primary: #f5f1ea;
+  --color-text-secondary: #a3a09a;
+  --color-text-muted: #6b6862;
+  --color-danger: #ef4444;
+
+  --font-serif: "Instrument Serif", ui-serif, Georgia, serif;
+  --font-body: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+}
+
+@theme inline {
+  --color-void: var(--color-void);
+  --color-void-raised: var(--color-void-raised);
+  --color-panel: var(--color-panel);
+  --color-amber-100: var(--color-amber-100);
+  --color-amber-400: var(--color-amber-400);
+  --color-amber-500: var(--color-amber-500);
+  --color-amber-600: var(--color-amber-600);
+  --color-text-primary: var(--color-text-primary);
+  --color-text-secondary: var(--color-text-secondary);
+  --color-text-muted: var(--color-text-muted);
+  --color-danger: var(--color-danger);
+
+  --font-serif: var(--font-serif);
+  --font-body: var(--font-body);
+  --font-mono: var(--font-mono);
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--color-void);
+  color: var(--color-text-primary);
+  font-family: var(--font-body);
+}
+
+/* Glass panel: subtle amber border glow, layered on the void background. */
+.glass-panel {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
+  border: 1px solid rgba(245, 158, 11, 0.14);
+  box-shadow:
+    0 0 0 1px rgba(245, 158, 11, 0.04) inset,
+    0 8px 40px -12px rgba(0, 0, 0, 0.6),
+    0 0 60px -30px var(--color-border-glow);
+  backdrop-filter: blur(20px);
+}
+
+.glow-text {
+  text-shadow: 0 0 30px rgba(245, 158, 11, 0.35);
+}
+
+.amber-gradient-text {
+  background: linear-gradient(120deg, var(--color-amber-100), var(--color-amber-400) 55%, var(--color-amber-600));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    opacity: 0.55;
+    filter: drop-shadow(0 0 4px rgba(245, 158, 11, 0.3));
+  }
+  50% {
+    opacity: 1;
+    filter: drop-shadow(0 0 14px rgba(245, 158, 11, 0.7));
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2.4s ease-in-out infinite;
+}
+
+::selection {
+  background: rgba(245, 158, 11, 0.3);
+  color: var(--color-text-primary);
+}
+
+* {
+  scrollbar-color: rgba(245, 158, 11, 0.3) transparent;
+}
+
+/* Shiki: let the code block sit inside our own glass panel background. */
+.shiki,
+.shiki span {
+  background-color: transparent !important;
+}
+
+.code-viewer pre.shiki {
+  counter-reset: line;
+  padding: 0;
+}
+
+.code-viewer pre.shiki code {
+  display: grid;
+}
+
+.code-viewer pre.shiki .line {
+  padding-left: 0.5rem;
+}
+
+.code-viewer pre.shiki .line::before {
+  counter-increment: line;
+  content: counter(line);
+  display: inline-block;
+  width: 2.25rem;
+  margin-right: 1rem;
+  text-align: right;
+  color: var(--color-text-muted);
+  user-select: none;
+}

@@ -1,0 +1,14 @@
+{
+  "name": "vulcan",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "VULCAN — Prompt-to-Protocol Live Factory on GenLayer",
+  "scripts": {
+    "deploy": "node scripts/deploy.mjs",
+    "seed": "node scripts/seed.mjs"
+  },
+  "dependencies": {
+    "genlayer-js": "^1.1.8"
+  }
+}
