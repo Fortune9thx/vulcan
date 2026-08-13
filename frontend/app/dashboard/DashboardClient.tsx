@@ -77,7 +77,11 @@ export function DashboardClient() {
   }, [openId, entries, autoOpenedFor]);
 
   async function loadMore() {
-    if (!client || totalCount === null) return;
+    // The button's disabled={loadingMore} only takes effect after React
+    // commits -- a fast double-click before that would otherwise call this
+    // twice concurrently, both reading the same entries.length and
+    // appending the same batch (duplicate keys, inflated "load more" count).
+    if (!client || totalCount === null || loadingMore) return;
     setLoadingMore(true);
     try {
       const ids = nextIdWindow(totalCount, entries.length);

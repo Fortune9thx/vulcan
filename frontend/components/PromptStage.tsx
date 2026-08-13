@@ -38,8 +38,9 @@ export function PromptStage({
           Describe it. Forge it. Deploy it under consensus.
         </p>
         <p className="mx-auto mt-2 max-w-md text-xs text-text-muted">
-          Every forge is a real multi-validator consensus decision — five GenLayer validators
-          independently check the result, and it&apos;s stored permanently on-chain, not in a database.
+          Every forge is a real multi-validator consensus decision — five GenLayer validators each
+          re-run the same objective check against the leader&apos;s proposal before it&apos;s stored
+          permanently on-chain, not in a database.
         </p>
       </div>
 

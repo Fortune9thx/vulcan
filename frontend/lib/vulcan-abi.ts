@@ -18,7 +18,17 @@ export function parseGenerationRecord(raw: string): GenerationRecord | null {
   if (!raw || raw === "{}") return null;
   try {
     const data = JSON.parse(raw);
-    if (typeof data.source !== "string") return null;
+    if (typeof data.source !== "string") {
+      console.warn("Generation record has a non-string/missing source field -- treating as empty.", data);
+      return null;
+    }
+    if (typeof data.prompt !== "string" || typeof data.summary !== "string" || typeof data.sender !== "string") {
+      // Not fatal -- the record still has real source/confidence -- but a
+      // wrong-typed field here could be masking a real on-chain
+      // serialization bug rather than a genuinely empty/low-confidence
+      // generation, so it's worth a visible signal rather than a silent "".
+      console.warn("Generation record has an unexpected shape for prompt/summary/sender.", data);
+    }
     return {
       prompt: typeof data.prompt === "string" ? data.prompt : "",
       source: data.source,
@@ -26,7 +36,8 @@ export function parseGenerationRecord(raw: string): GenerationRecord | null {
       confidence: String(data.confidence ?? "0"),
       sender: typeof data.sender === "string" ? data.sender : "",
     };
-  } catch {
+  } catch (err) {
+    console.warn("Failed to parse generation record JSON.", err, raw);
     return null;
   }
 }

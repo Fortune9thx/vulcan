@@ -167,6 +167,89 @@ class TestValidatorStructuralGate:
         contract.generate(VALID_PROMPT)
         assert direct_vm.run_validator(leader_error=Exception("leader crashed")) is False
 
+    def test_nan_confidence_rejected(self, contract, direct_vm):
+        # float("nan") < CONFIDENCE_THRESHOLD is False in Python -- this only
+        # passes if is_valid_generation explicitly checks math.isfinite().
+        _mock_leader(direct_vm, _generation_payload(confidence="nan"))
+        contract.generate(VALID_PROMPT)
+        assert direct_vm.run_validator() is False
+
+    def test_infinite_confidence_rejected(self, contract, direct_vm):
+        _mock_leader(direct_vm, _generation_payload(confidence="inf"))
+        contract.generate(VALID_PROMPT)
+        assert direct_vm.run_validator() is False
+
+    def test_required_fragments_hidden_in_a_comment_are_rejected(self, contract, direct_vm):
+        # A pure substring check would be fooled by this -- the real fragments
+        # are present as text, but there is no actual import/class/decorator.
+        fake_source = (
+            '# { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }\n'
+            "# fake: from genlayer import * -- gl.Contract -- @gl.public.\n"
+            "x = 1\n"
+        )
+        _mock_leader(direct_vm, _generation_payload(source=fake_source))
+        contract.generate(VALID_PROMPT)
+        assert direct_vm.run_validator() is False
+
+    def test_non_str_treemap_value_type_rejected(self, contract, direct_vm):
+        # TreeMap[str, u256] (or any non-str value type) deploys fine on
+        # Bradbury but becomes permanently unreadable afterward -- must be
+        # rejected at generation time, not merely discouraged in the prompt.
+        bad_source = VALID_SOURCE.replace(
+            "    value: str\n", "    value: str\n    counts: TreeMap[str, u256]\n"
+        )
+        _mock_leader(direct_vm, _generation_payload(source=bad_source))
+        contract.generate(VALID_PROMPT)
+        assert direct_vm.run_validator() is False
+
+    def test_variable_named_list_is_not_a_false_positive(self, contract, direct_vm):
+        # A real class-level `x: list[str]` annotation must be rejected, but
+        # a plain local variable that merely contains "list" in its name
+        # must NOT be -- proves the check is annotation-aware, not a raw
+        # substring scan over the whole source.
+        source_with_list_named_var = VALID_SOURCE.replace(
+            "        return self.value\n",
+            "        my_list = [1, 2, 3]\n        return self.value\n",
+        )
+        _mock_leader(direct_vm, _generation_payload(source=source_with_list_named_var))
+        contract.generate(VALID_PROMPT)
+        assert direct_vm.run_validator() is True
+
+    def test_syntactically_invalid_source_rejected(self, contract, direct_vm):
+        _mock_leader(direct_vm, _generation_payload(source="def broken(:\n    pass"))
+        contract.generate(VALID_PROMPT)
+        assert direct_vm.run_validator() is False
+
+    def test_class_without_public_method_rejected(self, contract, direct_vm):
+        no_public_method = (
+            '# { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }\n'
+            "from genlayer import *\n"
+            "class Example(gl.Contract):\n"
+            "    value: str\n"
+            "    def internal_helper(self) -> str:\n"
+            "        return self.value\n"
+        )
+        _mock_leader(direct_vm, _generation_payload(source=no_public_method))
+        contract.generate(VALID_PROMPT)
+        assert direct_vm.run_validator() is False
+
+
+class TestUnreachableConsensus:
+    def test_bare_float_confidence_from_llm_raises_clean_error_not_a_crash(self, contract, direct_vm):
+        # Empirically confirmed (not theorized): when the mocked LLM's own
+        # JSON contains a bare float, GenVM's calldata encoder fails while
+        # crossing the gl_call boundary and gl.vm.run_nondet_unsafe resolves
+        # to None -- it does NOT raise a Python exception inside leader(),
+        # so a try/except there cannot catch it. generate() must guard
+        # against a None result explicitly or it crashes with an unhandled
+        # AttributeError on result.get(...).
+        direct_vm.clear_mocks()
+        direct_vm.mock_llm(
+            ".*", json.dumps({"source": VALID_SOURCE, "summary": "x", "confidence": 0.85})
+        )
+        with pytest.raises(Exception):
+            contract.generate(VALID_PROMPT)
+
 
 class TestMarkDeployed:
     def test_mark_deployed_succeeds_for_high_confidence_generation(self, contract, direct_vm):
@@ -189,3 +272,23 @@ class TestMarkDeployed:
     def test_mark_deployed_rejected_for_unknown_generation(self, contract, direct_vm):
         with pytest.raises(Exception):
             contract.mark_deployed("no-such-id", "0x1234567890123456789012345678901234567890")
+
+    def test_mark_deployed_twice_rejected(self, contract, direct_vm):
+        _mock_leader(direct_vm, _generation_payload(confidence="0.9"))
+        generation_id = contract.generate(VALID_PROMPT)
+        contract.mark_deployed(generation_id, "0x1234567890123456789012345678901234567890")
+
+        with pytest.raises(Exception):
+            contract.mark_deployed(generation_id, "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+
+        # The original address must survive the rejected second attempt.
+        assert contract.get_deployed(generation_id) == "0x1234567890123456789012345678901234567890"
+
+    def test_mark_deployed_rejects_malformed_address(self, contract, direct_vm):
+        _mock_leader(direct_vm, _generation_payload(confidence="0.9"))
+        generation_id = contract.generate(VALID_PROMPT)
+
+        with pytest.raises(Exception):
+            contract.mark_deployed(generation_id, "not-an-address")
+
+        assert contract.get_deployed(generation_id) == ""

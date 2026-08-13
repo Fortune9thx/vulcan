@@ -38,8 +38,8 @@ export function ValidatorCards({ summary, confidence }: { summary: string; confi
           title={`Validator ${n}`}
           subtitle={
             passed
-              ? "Independently re-checked the leader's proposal and agreed."
-              : "Independently re-checked the leader's proposal and rejected it."
+              ? "Ran the same objective structural check on the leader's proposal and agreed."
+              : "Ran the same objective structural check on the leader's proposal and rejected it."
           }
           badge={passed ? "Agreed" : "Disagreed"}
           badgeTone={passed ? "amber" : "danger"}

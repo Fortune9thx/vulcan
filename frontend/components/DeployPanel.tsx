@@ -3,16 +3,13 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, Copy, ExternalLink, Rocket } from "lucide-react";
-import { TransactionStatus } from "genlayer-js/types";
 import type { GenLayerChain, GenLayerClient } from "genlayer-js/types";
 import { testnetBradbury } from "genlayer-js/chains";
 import { ConsensusVisualizer } from "@/components/ConsensusVisualizer";
 import { Button } from "@/components/ui/button";
-import { markDeployedOnChain, pollConsensusStatus } from "@/lib/genlayer-client";
+import { useDeployGeneration } from "@/lib/useDeployGeneration";
 import { CONFIDENCE_THRESHOLD, type GenerationRecord } from "@/lib/vulcan-abi";
 import { cn, truncateAddress } from "@/lib/utils";
-
-type DeployState = "idle" | "deploying" | "recording" | "done" | "error";
 
 export function DeployPanel({
   client,
@@ -24,10 +21,7 @@ export function DeployPanel({
   record: GenerationRecord;
 }) {
   const [copied, setCopied] = useState(false);
-  const [state, setState] = useState<DeployState>("idle");
-  const [status, setStatus] = useState<TransactionStatus>(TransactionStatus.PENDING);
-  const [deployedAddress, setDeployedAddress] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { state, status, deployedAddress, error, deploy } = useDeployGeneration(client, generationId);
 
   const confidence = Number.parseFloat(record.confidence);
   const blocked = !Number.isFinite(confidence) || confidence < CONFIDENCE_THRESHOLD;
@@ -36,33 +30,6 @@ export function DeployPanel({
     await navigator.clipboard.writeText(record.source);
     setCopied(true);
     setTimeout(() => setCopied(false), 1600);
-  }
-
-  async function handleDeploy() {
-    setState("deploying");
-    setError(null);
-    try {
-      const deployHash = await client.deployContract({ code: record.source });
-      const finalTx = await pollConsensusStatus(client, deployHash, ({ status }) => setStatus(status));
-
-      if (finalTx.statusName !== TransactionStatus.FINALIZED && finalTx.statusName !== TransactionStatus.ACCEPTED) {
-        throw new Error("Deployment did not reach consensus.");
-      }
-
-      const address = finalTx.to_address ?? finalTx.recipient;
-      if (!address) {
-        throw new Error("Deployment succeeded but no contract address was returned.");
-      }
-
-      setState("recording");
-      await markDeployedOnChain(client, generationId, address);
-
-      setDeployedAddress(address);
-      setState("done");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Deployment failed.");
-      setState("error");
-    }
   }
 
   if (state === "done" && deployedAddress) {
@@ -101,7 +68,7 @@ export function DeployPanel({
               {copied ? <Check size={15} /> : <Copy size={15} />}
               {copied ? "Copied" : "Copy source"}
             </Button>
-            <Button onClick={handleDeploy} disabled={blocked}>
+            <Button onClick={() => deploy(record.source)} disabled={blocked}>
               <Rocket size={15} />
               Deploy this contract
             </Button>

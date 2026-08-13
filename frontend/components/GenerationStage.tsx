@@ -9,11 +9,12 @@ import { ConsensusVisualizer } from "@/components/ConsensusVisualizer";
 import { CodeViewer } from "@/components/CodeViewer";
 import { ValidatorCards } from "@/components/ValidatorCards";
 import { Button } from "@/components/ui/button";
-import { fetchGeneration, pollConsensusStatus } from "@/lib/genlayer-client";
+import { fetchGeneration, pollConsensusStatus, resolveGenerationId } from "@/lib/genlayer-client";
 import type { GenerationRecord } from "@/lib/vulcan-abi";
 
 export function GenerationStage({
   client,
+  senderAddress,
   prompt,
   txHash,
   generationId,
@@ -21,10 +22,11 @@ export function GenerationStage({
   onRetry,
 }: {
   client: GenLayerClient<GenLayerChain>;
+  senderAddress: string;
   prompt: string;
   txHash: `0x${string}`;
   generationId: string;
-  onContinue: (record: GenerationRecord) => void;
+  onContinue: (record: GenerationRecord, resolvedGenerationId: string) => void;
   onRetry: () => void;
 }) {
   const [status, setStatus] = useState<TransactionStatus>(TransactionStatus.PENDING);
@@ -32,6 +34,7 @@ export function GenerationStage({
   const [record, setRecord] = useState<GenerationRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
   const started = useRef(false);
+  const resolvedIdRef = useRef(generationId);
 
   useEffect(() => {
     if (started.current) return;
@@ -41,11 +44,16 @@ export function GenerationStage({
 
     (async () => {
       try {
-        const finalTx = await pollConsensusStatus(client, txHash, ({ status, transaction }) => {
-          if (cancelled) return;
-          setStatus(status);
-          setTransaction(transaction);
-        });
+        const finalTx = await pollConsensusStatus(
+          client,
+          txHash,
+          ({ status, transaction }) => {
+            if (cancelled) return;
+            setStatus(status);
+            setTransaction(transaction);
+          },
+          { isCancelled: () => cancelled }
+        );
 
         if (cancelled) return;
 
@@ -58,7 +66,14 @@ export function GenerationStage({
           return;
         }
 
-        const fetched = await fetchGeneration(client, generationId);
+        // generation_id is assigned during the transaction's own execution,
+        // not at submission time -- if another generate() call landed in
+        // between, the id guessed before submitting could be wrong.
+        const resolvedId = await resolveGenerationId(client, { guessedId: generationId, prompt, senderAddress });
+        if (cancelled) return;
+        resolvedIdRef.current = resolvedId;
+
+        const fetched = await fetchGeneration(client, resolvedId);
         if (cancelled) return;
         if (!fetched) {
           setError("Consensus succeeded but the generation record could not be read back.");
@@ -75,7 +90,7 @@ export function GenerationStage({
     return () => {
       cancelled = true;
     };
-  }, [client, txHash, generationId]);
+  }, [client, txHash, generationId, prompt, senderAddress]);
 
   const failed = status === TransactionStatus.UNDETERMINED || status === TransactionStatus.CANCELED || !!error;
 
@@ -127,7 +142,7 @@ export function GenerationStage({
       <ValidatorCards summary={record!.summary} confidence={record!.confidence} />
 
       <div className="flex justify-end">
-        <Button size="lg" onClick={() => onContinue(record!)}>
+        <Button size="lg" onClick={() => onContinue(record!, resolvedIdRef.current)}>
           Continue to deploy
           <ArrowRight size={16} />
         </Button>

@@ -28,23 +28,46 @@ const STATUS_COPY: Partial<Record<TransactionStatus, string>> = {
   [TransactionStatus.COMMITTING]: "Validators evaluating independently…",
   [TransactionStatus.REVEALING]: "Checking equivalence across validators…",
   [TransactionStatus.ACCEPTED]: "Consensus reached",
+  [TransactionStatus.APPEAL_COMMITTING]: "Consensus is being appealed — validators re-evaluating…",
+  [TransactionStatus.APPEAL_REVEALING]: "Appeal round revealing votes…",
+  [TransactionStatus.READY_TO_FINALIZE]: "Ready to finalize…",
   [TransactionStatus.FINALIZED]: "Finalized on-chain",
   [TransactionStatus.UNDETERMINED]: "Consensus not reached",
   [TransactionStatus.CANCELED]: "Transaction canceled",
+  [TransactionStatus.VALIDATORS_TIMEOUT]: "Validators timed out",
+  [TransactionStatus.LEADER_TIMEOUT]: "Leader timed out",
 };
 
+// Every real TransactionStatus value has to land somewhere in this
+// pipeline -- a status that's absent here makes isAtLeast() return false
+// unconditionally, so the whole visualizer looks identical to "nothing
+// has started yet" even when the transaction is nearly finalized or deep
+// into an appeal. Appeal/ready-to-finalize states sit after ACCEPTED
+// (they only happen post-consensus) and keep the "consensus reached"
+// visual active rather than reverting it.
+const STATUS_ORDER = [
+  TransactionStatus.UNINITIALIZED,
+  TransactionStatus.PENDING,
+  TransactionStatus.PROPOSING,
+  TransactionStatus.COMMITTING,
+  TransactionStatus.REVEALING,
+  TransactionStatus.ACCEPTED,
+  TransactionStatus.APPEAL_COMMITTING,
+  TransactionStatus.APPEAL_REVEALING,
+  TransactionStatus.READY_TO_FINALIZE,
+  TransactionStatus.FINALIZED,
+];
+
+const FAILED_STATUSES = new Set<TransactionStatus>([
+  TransactionStatus.UNDETERMINED,
+  TransactionStatus.CANCELED,
+  TransactionStatus.VALIDATORS_TIMEOUT,
+  TransactionStatus.LEADER_TIMEOUT,
+]);
+
 function isAtLeast(status: TransactionStatus, stage: TransactionStatus): boolean {
-  const order = [
-    TransactionStatus.UNINITIALIZED,
-    TransactionStatus.PENDING,
-    TransactionStatus.PROPOSING,
-    TransactionStatus.COMMITTING,
-    TransactionStatus.REVEALING,
-    TransactionStatus.ACCEPTED,
-    TransactionStatus.FINALIZED,
-  ];
-  const a = order.indexOf(status);
-  const b = order.indexOf(stage);
+  const a = STATUS_ORDER.indexOf(status);
+  const b = STATUS_ORDER.indexOf(stage);
   if (a === -1 || b === -1) return false;
   return a >= b;
 }
@@ -56,7 +79,7 @@ export function ConsensusVisualizer({
   status: TransactionStatus;
   transaction?: GenLayerTransaction | null;
 }) {
-  const failed = status === TransactionStatus.UNDETERMINED || status === TransactionStatus.CANCELED;
+  const failed = FAILED_STATUSES.has(status);
   const leaderActive = isAtLeast(status, TransactionStatus.PROPOSING) && !failed;
   const validatorsCommitting = isAtLeast(status, TransactionStatus.COMMITTING) && !failed;
   const revealing = isAtLeast(status, TransactionStatus.REVEALING) && !failed;

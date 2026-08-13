@@ -22,7 +22,7 @@ only an agreed-upon result is ever stored.
 | Real Intelligent Contract + full transaction lifecycle | `contracts/Vulcan.py`, exercised end-to-end by the frontend: submit → real tx hash → real status polling (`PENDING…FINALIZED`) → read back the stored result → deploy the generated contract → record it back on `Vulcan`. |
 | Complete source + accurate docs | This repo. `docs/ARCHITECTURE.md` explains the consensus flow and every deliberate design decision; `docs/HOW_TO_USE.md` covers running it. |
 | Meaningfully different from boilerplate | A code-generation contract whose own output is itself a GenLayer contract, validated against GenLayer's own legality rules (storage types, decorators, runner header) as part of consensus — not a generic chatbot-in-a-dApp wrapper. |
-| Credible path to continued use | Every generation is permanently addressable (`get_generation`, `get_count`, `/history`), and the deployed-address record (`get_deployed` / `mark_deployed`) means VULCAN accumulates a real, growing library of consensus-generated contracts builders can browse and reuse. |
+| Credible path to continued use | Every generation is permanently addressable (`get_generation`, `get_count`, `/dashboard`), and the deployed-address record (`get_deployed` / `mark_deployed`) means VULCAN accumulates a real, growing library of consensus-generated contracts builders can browse, filter, and reuse. |
 
 ## GenLayer Skills compliance
 

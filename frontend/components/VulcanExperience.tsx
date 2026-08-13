@@ -15,7 +15,7 @@ import type { GenerationRecord } from "@/lib/vulcan-abi";
 type Stage = "prompt" | "consensus" | "deploy";
 
 export function VulcanExperience() {
-  const { client } = useVulcanClient();
+  const { client, address } = useVulcanClient();
   const searchParams = useSearchParams();
   const defaultPrompt = searchParams.get("prompt") ?? undefined;
 
@@ -79,17 +79,19 @@ export function VulcanExperience() {
             />
           )}
 
-          {stage === "consensus" && client && txHash && generationId !== null && (
+          {stage === "consensus" && client && address && txHash && generationId !== null && (
             <GenerationStage
               key="consensus"
               client={client}
+              senderAddress={address}
               prompt={prompt}
               txHash={txHash}
               generationId={generationId}
-              onContinue={(finishedRecord) => {
+              onContinue={(finishedRecord, resolvedGenerationId) => {
                 setRecord(finishedRecord);
+                setGenerationId(resolvedGenerationId);
                 setStage("deploy");
-                setToastGenerationId(generationId);
+                setToastGenerationId(resolvedGenerationId);
               }}
               onRetry={handleRetry}
             />

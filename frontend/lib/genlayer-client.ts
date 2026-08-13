@@ -73,6 +73,55 @@ export async function fetchGeneration(
   return parseGenerationRecord(String(raw));
 }
 
+const ID_RESOLUTION_SEARCH_WINDOW = 10;
+
+/**
+ * generation_id is assigned inside the contract's own execution
+ * (generation_count at the moment THIS transaction runs), not at
+ * submission time -- reading get_count() before submitting and assuming
+ * that value is the id is only safe if no other generate() call executes
+ * in between. If one does, the naive guess silently points at a different
+ * (possibly another user's) generation.
+ *
+ * This resolves the real id defensively: try the guess first (the fast,
+ * overwhelmingly common path), and if that record doesn't actually match
+ * this prompt/sender, search backward from the current count for the one
+ * that does, bounded to a small window rather than scanning the whole
+ * history.
+ */
+export async function resolveGenerationId(
+  client: GenLayerClient<GenLayerChain>,
+  {
+    guessedId,
+    prompt,
+    senderAddress,
+  }: { guessedId: string; prompt: string; senderAddress: string }
+): Promise<string> {
+  const matches = (record: GenerationRecord | null) =>
+    !!record && record.prompt === prompt && record.sender.toLowerCase() === senderAddress.toLowerCase();
+
+  const guessed = await fetchGeneration(client, guessedId);
+  if (matches(guessed)) return guessedId;
+
+  const count = await fetchGenerationCount(client);
+  const searchStart = count - 1;
+  const searchEnd = Math.max(-1, searchStart - ID_RESOLUTION_SEARCH_WINDOW);
+
+  for (let id = searchStart; id > searchEnd; id--) {
+    const candidateId = String(id);
+    if (candidateId === guessedId) continue; // already checked above
+    const candidate = await fetchGeneration(client, candidateId);
+    if (matches(candidate)) return candidateId;
+  }
+
+  console.warn(
+    `Could not confidently resolve the generation id for this submission within ` +
+      `${ID_RESOLUTION_SEARCH_WINDOW} entries of the current count -- falling back to the ` +
+      `pre-submission guess (${guessedId}), which may be wrong if other generations landed concurrently.`
+  );
+  return guessedId;
+}
+
 export async function fetchGenerationCount(client: GenLayerClient<GenLayerChain>): Promise<number> {
   const count = await client.readContract({
     address: getVulcanAddress(),
@@ -106,21 +155,58 @@ export interface ConsensusTick {
   transaction: GenLayerTransaction;
 }
 
+const MAX_CONSECUTIVE_RPC_FAILURES = 4;
+
+export class PollCancelledError extends Error {
+  constructor() {
+    super("Polling was cancelled");
+    this.name = "PollCancelledError";
+  }
+}
+
 /**
  * Polls the real transaction status until a terminal state is reached,
  * invoking onTick with every observed status change. This drives
  * ConsensusVisualizer directly off chain state -- no fabricated timers.
+ *
+ * `isCancelled` is checked before every network call and every sleep, not
+ * just inside onTick -- without it, a caller's "cancelled" flag only
+ * stopped the loop from *reporting* status, not from actually running: the
+ * for-loop kept calling getTransaction and sleeping for up to
+ * intervalMs * maxAttempts after the UI it was updating had already
+ * unmounted. A single transient RPC failure (client.getTransaction
+ * throwing on a network blip) also used to abort the whole poll
+ * immediately; it's now tolerated up to MAX_CONSECUTIVE_RPC_FAILURES times
+ * in a row before giving up, since one bad request doesn't mean the
+ * transaction itself failed.
  */
 export async function pollConsensusStatus(
   client: GenLayerClient<GenLayerChain>,
   hash: `0x${string}`,
   onTick: (tick: ConsensusTick) => void,
-  { intervalMs = 1500, maxAttempts = 120 }: { intervalMs?: number; maxAttempts?: number } = {}
+  {
+    intervalMs = 1500,
+    maxAttempts = 120,
+    isCancelled = () => false,
+  }: { intervalMs?: number; maxAttempts?: number; isCancelled?: () => boolean } = {}
 ): Promise<GenLayerTransaction> {
   let lastStatus: TransactionStatus | null = null;
+  let consecutiveFailures = 0;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const transaction = await client.getTransaction({ hash: hash as TransactionHash });
+    if (isCancelled()) throw new PollCancelledError();
+
+    let transaction: GenLayerTransaction;
+    try {
+      transaction = await client.getTransaction({ hash: hash as TransactionHash });
+      consecutiveFailures = 0;
+    } catch (err) {
+      consecutiveFailures += 1;
+      if (consecutiveFailures > MAX_CONSECUTIVE_RPC_FAILURES) throw err;
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+      continue;
+    }
+
     const status = transaction.statusName ?? TransactionStatus.PENDING;
 
     if (status !== lastStatus) {
@@ -132,6 +218,7 @@ export async function pollConsensusStatus(
       return transaction;
     }
 
+    if (isCancelled()) throw new PollCancelledError();
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
 

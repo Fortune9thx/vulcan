@@ -1,21 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { motion } from "framer-motion";
 import { Check, Copy, ExternalLink, Rocket, Sparkles, X } from "lucide-react";
-import { TransactionStatus } from "genlayer-js/types";
 import type { GenLayerChain, GenLayerClient } from "genlayer-js/types";
 import { testnetBradbury } from "genlayer-js/chains";
 import { CodeViewer } from "@/components/CodeViewer";
 import { ConsensusVisualizer } from "@/components/ConsensusVisualizer";
 import { Button } from "@/components/ui/button";
-import { markDeployedOnChain, pollConsensusStatus } from "@/lib/genlayer-client";
+import { useDeployGeneration } from "@/lib/useDeployGeneration";
 import { CONFIDENCE_THRESHOLD } from "@/lib/vulcan-abi";
 import type { DashboardEntry } from "@/lib/dashboard-data";
 import { truncateAddress } from "@/lib/utils";
-
-type DeployState = "idle" | "deploying" | "recording" | "done" | "error";
 
 export function GenerationDetail({
   entry,
@@ -31,9 +27,21 @@ export function GenerationDetail({
   onDeployed: (generationId: string, address: string) => void;
 }) {
   const [copied, setCopied] = useState(false);
-  const [deployState, setDeployState] = useState<DeployState>("idle");
-  const [status, setStatus] = useState<TransactionStatus>(TransactionStatus.PENDING);
-  const [error, setError] = useState<string | null>(null);
+  // Keyed by entry?.id, not just mounted once -- this drawer stays mounted
+  // across different generations (Radix only toggles `open`), so without
+  // resetting per-id, a previous generation's "done"/"error" state used to
+  // leak onto whichever unrelated generation was opened next.
+  const { state, status, deployedAddress, error, deploy } = useDeployGeneration(client, entry?.id ?? "");
+
+  // Notifying the parent is a side effect, not something to do during
+  // render (which would fire on every render while state stays "done" and
+  // risks a "setState on a different component while rendering" warning).
+  useEffect(() => {
+    if (entry && state === "done" && deployedAddress) {
+      onDeployed(entry.id, deployedAddress);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entry?.id, state, deployedAddress]);
 
   if (!entry) return null;
 
@@ -49,28 +57,7 @@ export function GenerationDetail({
   }
 
   async function handleDeploy() {
-    if (!client) return;
-    setDeployState("deploying");
-    setError(null);
-    try {
-      const deployHash = await client.deployContract({ code: entry!.source });
-      const finalTx = await pollConsensusStatus(client, deployHash, ({ status }) => setStatus(status));
-
-      if (finalTx.statusName !== TransactionStatus.FINALIZED && finalTx.statusName !== TransactionStatus.ACCEPTED) {
-        throw new Error("Deployment did not reach consensus.");
-      }
-      const address = finalTx.to_address ?? finalTx.recipient;
-      if (!address) throw new Error("Deployment succeeded but no contract address was returned.");
-
-      setDeployState("recording");
-      await markDeployedOnChain(client, entry!.id, address);
-
-      onDeployed(entry!.id, address);
-      setDeployState("done");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Deployment failed.");
-      setDeployState("error");
-    }
+    await deploy(entry!.source);
   }
 
   return (
@@ -114,18 +101,18 @@ export function GenerationDetail({
             </div>
 
             <div className="glass-panel rounded-xl p-5">
-              {alreadyDeployed ? (
+              {alreadyDeployed || (state === "done" && deployedAddress) ? (
                 <div>
                   <h3 className="mb-2 font-mono text-[10px] uppercase tracking-wide text-text-muted">
                     Deployed
                   </h3>
                   <div className="flex items-center justify-between gap-3">
                     <span className="font-mono text-sm text-text-primary">
-                      {truncateAddress(entry.deployedAddress, 8)}
+                      {truncateAddress(deployedAddress ?? entry.deployedAddress, 8)}
                     </span>
                     {explorerUrl && (
                       <a
-                        href={`${explorerUrl}address/${entry.deployedAddress}`}
+                        href={`${explorerUrl}address/${deployedAddress ?? entry.deployedAddress}`}
                         target="_blank"
                         rel="noreferrer"
                         className="flex items-center gap-1 font-mono text-xs text-amber-400 hover:underline"
@@ -136,21 +123,13 @@ export function GenerationDetail({
                     )}
                   </div>
                 </div>
-              ) : deployState === "deploying" || deployState === "recording" ? (
+              ) : state === "deploying" || state === "recording" ? (
                 <div className="flex flex-col items-center py-2">
                   <ConsensusVisualizer status={status} />
-                  {deployState === "recording" && (
+                  {state === "recording" && (
                     <p className="mt-2 font-mono text-xs text-text-muted">Recording deployment on Vulcan…</p>
                   )}
                 </div>
-              ) : deployState === "done" ? (
-                <motion.p
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="text-center font-mono text-sm text-amber-400"
-                >
-                  Deployed and recorded.
-                </motion.p>
               ) : (
                 <div className="flex flex-col gap-3">
                   {!passed && (
