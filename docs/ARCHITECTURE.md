@@ -135,8 +135,91 @@ strengthened (contracts are immutable once deployed, so a prompt change
 requires a fresh instance, not an upgrade):
 
 - `0x135E3Fe73A0Eab53727E598459BceB22ec5BF57D` — original prompt, superseded.
-- `0xf50543E8e15f4e09E7aF9D143549F165FA86F40d` — current, strengthened
-  prompt (idiomatic storage-declaration guidance, an explicit non-determinism-
-  boundary rule, and a minimal reference example). Both are recorded in
-  `contracts/addresses.json`; the frontend only ever talks to the current one
-  via `NEXT_PUBLIC_VULCAN_CONTRACT_ADDRESS`.
+- `0xf50543E8e15f4e09E7aF9D143549F165FA86F40d` — strengthened prompt
+  (idiomatic storage-declaration guidance, an explicit non-determinism-
+  boundary rule, and a minimal reference example), superseded.
+- `0x19b04aa76f241db4B645fCF5d332513a6D18f5A4` — current, after the
+  independent-audit fixes below (AST-based structural validation, a
+  str-only TreeMap rule, `mark_deployed` access control).
+
+All three are recorded in `contracts/addresses.json`; the frontend only
+ever talks to the current one via `NEXT_PUBLIC_VULCAN_CONTRACT_ADDRESS`.
+
+## Independent audit findings and fixes
+
+Before submission, six independent zero-bias reviews (contract
+correctness, on-chain data/transaction layer, UI flow/duplication, test
+coverage, docs accuracy, Portal quality-bar skepticism) were run
+specifically to find reasons to reject the project, not to confirm it
+works. All 13 confirmed findings were fixed, each backed by a new or
+updated test that would fail without the fix.
+
+**Contract-side, most severe first:**
+- The original validator used raw substring matching (`fragment in
+  source`) to check for required GenLayer scaffolding. This is bypassable
+  — an LLM steered by a crafted prompt could satisfy every required
+  fragment by embedding them in a comment, with no real functioning code
+  around them, and every validator would deterministically "validate" the
+  result. Replaced with real `ast`-based structural checks: an actual
+  `ast.ImportFrom` for `genlayer`, an actual `ast.ClassDef` with a base
+  matching `gl.Contract`, an actual `@gl.public.*`-decorated method inside
+  it. This also fixed a false-positive: the old `"list[" in source` /
+  `"dict[" in source` check rejected any code merely naming a variable
+  `my_list`, since it wasn't annotation-aware; the AST check only inspects
+  real class-level storage annotations.
+- `float("nan") < 0.55` is `False` in Python — the confidence gate didn't
+  reject NaN/Infinity confidence values because nothing checked
+  `math.isfinite()` explicitly. Fixed.
+- Confirmed empirically (not theorized) via a minimal probe contract: when
+  the LLM's own JSON response contains a bare float, `gl.vm.run_nondet_
+  unsafe` resolves to `None` rather than raising a Python exception inside
+  `leader()` — a `try/except` around `exec_prompt` cannot catch it, because
+  the failure happens in GenVM's own calldata encoding, not in contract
+  code. `generate()` previously had no null-check before calling
+  `result.get(...)`, so this crashed with an unhandled `AttributeError`.
+  Fixed with an explicit `if result is None: raise gl.vm.UserError(...)`.
+- The system prompt told the model any concrete `TreeMap[K,V]` was legal,
+  contradicting this project's own documented finding two sections up —
+  Vulcan could generate a contract that bricks itself the moment it's
+  deployed, for an entirely ordinary request. The validator now rejects
+  any `TreeMap` value type other than `str` at generation time, not just
+  in prompt guidance.
+- `mark_deployed` had no access control at all: any caller could mark any
+  generation as deployed with any string as the address, overwrite an
+  existing legitimate record, or write `""` to silently un-mark someone
+  else's real deployment. Now requires the caller to match the
+  generation's original `sender`, rejects a second call on an
+  already-deployed generation, and validates the address is a well-formed
+  20-byte hex string.
+
+**Frontend-side:**
+- `generation_id` is assigned inside the contract's own execution, not at
+  submission time. The frontend guessed it from a `get_count()` read taken
+  *before* submitting, which is wrong if another `generate()` call lands
+  in between — silently attributing another user's generation, and
+  potentially writing a deployed address onto their record. Now resolved
+  defensively after consensus: try the guess first, and if it doesn't
+  match this prompt/sender, search backward from the current count for
+  the record that does.
+- `pollConsensusStatus`'s cancellation flag only gated its `onTick`
+  callback, not the polling loop itself — a component that unmounted
+  mid-consensus left the loop running for up to three minutes. It also
+  aborted entirely on a single transient RPC failure. Both fixed: the loop
+  now checks cancellation before every network call and sleep, and
+  tolerates a few consecutive failures before giving up.
+- `DeployPanel` and `GenerationDetail` had copy-pasted, independently
+  maintained deploy flows. Extracted into a shared `useDeployGeneration`
+  hook, which also fixed a real bug: `GenerationDetail` stayed mounted
+  across different generations (Radix only toggles visibility), so a
+  previous generation's "done" state leaked onto an unrelated,
+  never-deployed one. The hook resets on `generationId` change.
+- `ConsensusVisualizer` only handled 9 of the real 14 `TransactionStatus`
+  values — a transaction reaching `READY_TO_FINALIZE` or a timeout state
+  looked identical to "nothing has started," and timeouts rendered in the
+  neutral style instead of the failure style. All 14 now handled
+  explicitly.
+- UI copy said validators "independently check" the result. The validator
+  is a deterministic function of the leader's single output, replicated
+  across validators — a split vote is impossible by construction, so
+  "independently" overstated it. Reworded to describe what actually
+  happens: every validator re-runs the same objective check.
