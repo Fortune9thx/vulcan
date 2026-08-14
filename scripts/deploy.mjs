@@ -27,11 +27,23 @@ const NETWORKS = {
   asimov: { chain: testnetAsimov, addressKey: "asimov" },
 };
 
+// Deliberately excludes ACCEPTED, unlike an earlier version of this script --
+// ACCEPTED can still be appealed and reversed before FINALIZED, and this
+// script writes the resulting address straight into contracts/addresses.json
+// (which the frontend then treats as the live contract). Recording an
+// address that gets reversed on appeal would silently point the whole app
+// at a dead contract. This is a one-shot CLI deploy, not a live polling UX
+// with a latency budget to protect, so there's no real cost to waiting for
+// the fully-settled outcome. LEADER_TIMEOUT/VALIDATORS_TIMEOUT are real,
+// already-decided terminal outcomes too (per genlayer-js's own
+// DECIDED_STATES) -- included so a real timeout fails fast with a clear
+// status instead of grinding through the full poll budget first.
 const TERMINAL_STATUSES = new Set([
   TransactionStatus.FINALIZED,
-  TransactionStatus.ACCEPTED,
   TransactionStatus.UNDETERMINED,
   TransactionStatus.CANCELED,
+  TransactionStatus.LEADER_TIMEOUT,
+  TransactionStatus.VALIDATORS_TIMEOUT,
 ]);
 
 async function pollUntilTerminal(client, hash, { intervalMs = 2000, maxAttempts = 90 } = {}) {
@@ -72,8 +84,8 @@ async function main() {
 
   const transaction = await pollUntilTerminal(client, hash);
 
-  if (transaction.statusName !== TransactionStatus.FINALIZED && transaction.statusName !== TransactionStatus.ACCEPTED) {
-    throw new Error(`Deployment did not reach consensus (status: ${transaction.statusName}).`);
+  if (transaction.statusName !== TransactionStatus.FINALIZED) {
+    throw new Error(`Deployment did not finalize (status: ${transaction.statusName}).`);
   }
 
   const deployedAddress = transaction.to_address ?? transaction.recipient;

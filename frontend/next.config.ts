@@ -10,12 +10,50 @@ const nextConfig: NextConfig = {
     // hidden/disguised iframe on another site for a clickjacking attempt
     // against those buttons. The rest are standard baseline hardening;
     // Next/Vercel set none of these by default.
+    //
+    // The CSP restricts script/object sources beyond just frame-ancestors --
+    // there's no known injection point today (verified by two independent
+    // adversarial reviews, one of which live-tested actual payloads against
+    // this exact deploy), but that's exactly when defense-in-depth is worth
+    // adding: it costs nothing until the day a new dangerouslySetInnerHTML
+    // or unsanitized href shows up, at which point it's the difference
+    // between an inert bug and a working exploit. connect-src/img-src stay
+    // deliberately permissive (https:/wss: rather than an exact allowlist)
+    // -- wagmi's wallet-connector stack (WalletConnect's relay, Coinbase
+    // Smart Wallet, Safe) talks to a set of origins that would require
+    // testing every connector live against a real wallet to enumerate
+    // precisely, which isn't practical to verify here; script/object/base
+    // are the directives that actually matter against XSS and stay tight.
     return [
       {
         source: "/:path*",
         headers: [
           { key: "X-Frame-Options", value: "DENY" },
-          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+          {
+            key: "Content-Security-Policy",
+            value: [
+              "default-src 'self'",
+              // 'unsafe-eval' isn't a guess -- tested against the actual
+              // production build (`next build && next start`), not just
+              // dev mode: without it, the client bundle throws an
+              // uncaught EvalError on every single page load, meaning
+              // something in the real wagmi/viem/WalletConnect stack
+              // genuinely calls eval()/Function() at runtime. Blocking it
+              // to chase a theoretical CSP tightening would risk silently
+              // breaking real wallet functionality for a directive that
+              // still blocks the one thing that actually matters here --
+              // loading a *foreign* script from a different origin.
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+              "style-src 'self' 'unsafe-inline'",
+              "img-src 'self' data: https:",
+              "font-src 'self' data:",
+              "connect-src 'self' https: wss:",
+              "object-src 'none'",
+              "base-uri 'self'",
+              "form-action 'self'",
+              "frame-ancestors 'none'",
+            ].join("; "),
+          },
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
         ],
