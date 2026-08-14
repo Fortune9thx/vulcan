@@ -76,6 +76,25 @@ the original request:
   `TIMEOUT`, a real, disclosed cost: two consensus rounds mean more
   wall-clock time and LLM calls than one, and that occasionally shows up
   as a validator timing out under real network conditions.
+- **A real `LEADER_TIMEOUT` was hit live** (not in testing -- a user
+  reported it) and traced to a specific, verifiable cause rather than left
+  as "the network is sometimes slow": every chain genlayer-js ships
+  (confirmed by reading the installed SDK source, not assumed) defaults
+  `consensusMaxRotations` to `3` -- the number of leader attempts the
+  platform makes before giving up on the whole transaction. `generate()`
+  is a heavier write than most: a large system prompt asking for a full
+  contract, then a second independent LLM round on top of that for
+  alignment, giving one slow or failed attempt more surface to eat the
+  default budget than a typical write would. `frontend/lib/genlayer-
+  client.ts`'s `generateContract()` now explicitly passes
+  `consensusMaxRotations: 5` on this specific call -- `mark_deployed`
+  stays on the platform default since it's a plain deterministic write
+  with no LLM call in it to ever need extra retry budget for. This
+  reduces how often the timeout fires; it doesn't eliminate the
+  possibility, since real LLM latency is still real LLM latency, which
+  is why `GenerationStage.tsx` still surfaces `LEADER_TIMEOUT` with an
+  honest, specific "the leader timed out producing a result, try again"
+  message rather than hiding it.
 
 Both rounds' results are stored together in `generations: TreeMap[str, str]`
 as one JSON record, and the sender's `generation_id` is appended to

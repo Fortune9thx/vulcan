@@ -79,6 +79,18 @@ export function useVulcanClient(): {
   return { client, address };
 }
 
+// Every chain genlayer-js ships (localnet, studionet, both testnets) defaults
+// consensusMaxRotations to 3 -- confirmed by reading the installed SDK
+// source, not assumed. That's the number of leader attempts the platform
+// makes before giving up and reporting LEADER_TIMEOUT for the whole
+// transaction. generate() is a heavier call than most writes it takes:
+// a large system prompt asking for a full contract, then (on top of that)
+// a second independent LLM round for alignment -- more surface for one
+// slow/failed attempt to eat the default budget. Raised to 5 specifically
+// for this call; other Vulcan writes (mark_deployed) stay on the default
+// since they're plain deterministic writes with no LLM call in them at all.
+const GENERATE_MAX_ROTATIONS = 5;
+
 export async function generateContract(
   client: GenLayerClient<GenLayerChain>,
   prompt: string
@@ -88,6 +100,7 @@ export async function generateContract(
     functionName: VULCAN_METHODS.generate,
     args: [prompt],
     value: 0n,
+    consensusMaxRotations: GENERATE_MAX_ROTATIONS,
   });
   return hash as `0x${string}`;
 }
