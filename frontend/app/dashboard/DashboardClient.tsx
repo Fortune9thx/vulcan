@@ -12,7 +12,7 @@ import { GenerationCard } from "@/components/GenerationCard";
 import { GenerationDetail } from "@/components/GenerationDetail";
 import { EmptyState } from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
-import { useVulcanClient, fetchGenerationCount } from "@/lib/genlayer-client";
+import { useVulcanClient, getReadOnlyVulcanClient, fetchGenerationCount } from "@/lib/genlayer-client";
 import {
   DASHBOARD_BATCH_SIZE,
   computeStats,
@@ -26,7 +26,13 @@ import {
 } from "@/lib/dashboard-data";
 
 export function DashboardClient() {
-  const { client, address } = useVulcanClient();
+  const { client: walletClient, address } = useVulcanClient();
+  // Reads never need a signer -- the same wallet-free client the public
+  // /g/[id] page uses. Gating the whole page (including "All Forges") on
+  // useVulcanClient's wallet-bound client would mean nobody without a
+  // connected wallet could ever see the on-chain-only dashboard this
+  // project's own docs describe as needing no wallet to browse.
+  const readClient = getReadOnlyVulcanClient();
   const searchParams = useSearchParams();
   const openId = searchParams.get("open");
 
@@ -46,37 +52,38 @@ export function DashboardClient() {
   const [autoOpenedFor, setAutoOpenedFor] = useState<string | null>(null);
 
   const loadAllBatch = useCallback(async () => {
-    if (!client) return;
     setLoading(true);
     setError(null);
     try {
-      const count = await fetchGenerationCount(client);
+      const count = await fetchGenerationCount(readClient);
       setTotalCount(count);
       const ids = nextIdWindow(count, 0);
-      const batch = await fetchGenerationsWindow(client, ids);
+      const batch = await fetchGenerationsWindow(readClient, ids);
       setEntries(batch);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load generations.");
     } finally {
       setLoading(false);
     }
-  }, [client]);
+  }, [readClient]);
 
   // "My Forges" is exact (Vulcan.user_generations), fetched independently
   // of the "All Forges" batch -- see docs/ARCHITECTURE.md for why this no
   // longer has the "of N loaded" caveat the all-forges stats still do.
+  // Still needs a connected wallet -- not for the read itself (readClient
+  // handles that), but to know which address's generations to look up.
   const loadMine = useCallback(async () => {
-    if (!client || !address) return;
+    if (!address) return;
     setLoadingMine(true);
     try {
-      const mine = await fetchMyGenerations(client, address);
+      const mine = await fetchMyGenerations(readClient, address);
       setMyEntries(mine);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load your generations.");
     } finally {
       setLoadingMine(false);
     }
-  }, [client, address]);
+  }, [readClient, address]);
 
   const refreshAll = useCallback(() => {
     loadAllBatch();
@@ -109,11 +116,11 @@ export function DashboardClient() {
     // commits -- a fast double-click before that would otherwise call this
     // twice concurrently, both reading the same entries.length and
     // appending the same batch (duplicate keys, inflated "load more" count).
-    if (!client || totalCount === null || loadingMore) return;
+    if (totalCount === null || loadingMore) return;
     setLoadingMore(true);
     try {
       const ids = nextIdWindow(totalCount, entries.length);
-      const batch = await fetchGenerationsWindow(client, ids);
+      const batch = await fetchGenerationsWindow(readClient, ids);
       setEntries((prev) => [...prev, ...batch]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load more generations.");
@@ -148,62 +155,58 @@ export function DashboardClient() {
           </p>
         </div>
 
-        {!address ? (
+        <DashboardStats stats={stats} onRefresh={refreshAll} refreshing={loading || loadingMine} />
+
+        <div className="my-6">
+          <DashboardFilters
+            tab={tab}
+            onTabChange={setTab}
+            search={search}
+            onSearchChange={setSearch}
+            sort={sort}
+            onSortChange={setSort}
+          />
+        </div>
+
+        {error && <p className="mb-4 font-mono text-xs text-danger">{error}</p>}
+
+        {tab === "mine" && !address ? (
           <EmptyState
             icon={Wallet}
             title="Connect your wallet"
-            description="Connect to see your own forges and deploy directly from here."
+            description="My Forges reads your on-chain generation index, which needs your address -- connect a wallet to see it."
           />
+        ) : currentlyLoading && baseEntries.length === 0 ? (
+          <SkeletonGrid />
+        ) : visible.length === 0 ? (
+          <EmptyStateForTab tab={tab} totalCount={totalCount ?? 0} />
         ) : (
           <>
-            <DashboardStats stats={stats} onRefresh={refreshAll} refreshing={loading || loadingMine} />
-
-            <div className="my-6">
-              <DashboardFilters
-                tab={tab}
-                onTabChange={setTab}
-                search={search}
-                onSearchChange={setSearch}
-                sort={sort}
-                onSortChange={setSort}
-              />
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <AnimatePresence>
+                {visible.map((entry) => (
+                  <GenerationCard
+                    key={entry.id}
+                    entry={entry}
+                    myAddress={address}
+                    onClick={() => {
+                      setSelected(entry);
+                      setDetailOpen(true);
+                    }}
+                  />
+                ))}
+              </AnimatePresence>
             </div>
 
-            {error && <p className="mb-4 font-mono text-xs text-danger">{error}</p>}
-
-            {currentlyLoading && baseEntries.length === 0 ? (
-              <SkeletonGrid />
-            ) : visible.length === 0 ? (
-              <EmptyStateForTab tab={tab} totalCount={totalCount ?? 0} />
-            ) : (
-              <>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  <AnimatePresence>
-                    {visible.map((entry) => (
-                      <GenerationCard
-                        key={entry.id}
-                        entry={entry}
-                        myAddress={address}
-                        onClick={() => {
-                          setSelected(entry);
-                          setDetailOpen(true);
-                        }}
-                      />
-                    ))}
-                  </AnimatePresence>
-                </div>
-
-                {hasMore && tab === "all" && !search && (
-                  <div className="mt-6 flex justify-center">
-                    <Button variant="outline" onClick={loadMore} disabled={loadingMore}>
-                      {loadingMore ? <Loader2 size={14} className="animate-spin" /> : null}
-                      {loadingMore
-                        ? "Loading…"
-                        : `Load ${Math.min(DASHBOARD_BATCH_SIZE, totalCount! - entries.length)} more`}
-                    </Button>
-                  </div>
-                )}
-              </>
+            {hasMore && tab === "all" && !search && (
+              <div className="mt-6 flex justify-center">
+                <Button variant="outline" onClick={loadMore} disabled={loadingMore}>
+                  {loadingMore ? <Loader2 size={14} className="animate-spin" /> : null}
+                  {loadingMore
+                    ? "Loading…"
+                    : `Load ${Math.min(DASHBOARD_BATCH_SIZE, totalCount! - entries.length)} more`}
+                </Button>
+              </div>
             )}
           </>
         )}
@@ -213,7 +216,7 @@ export function DashboardClient() {
         entry={selected}
         open={detailOpen}
         onOpenChange={setDetailOpen}
-        client={client}
+        client={walletClient}
         onDeployed={handleDeployed}
       />
     </div>

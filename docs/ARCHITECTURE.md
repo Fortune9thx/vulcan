@@ -195,6 +195,126 @@ fresh instance, not an upgrade):
 All four are recorded in `contracts/addresses.json`; the frontend only
 ever talks to the current one via `NEXT_PUBLIC_VULCAN_CONTRACT_ADDRESS`.
 
+## Security audit
+
+A dedicated security pass — separate from the correctness-focused
+independent audit above — looked specifically for ways the app, its
+users, or their wallets could be compromised: contract-level attack
+surface, prompt injection (direct and indirect), frontend XSS/trust
+surfaces, wallet interaction, and dependency supply chain. Two risks are
+architecturally real and were fixed by honest disclosure rather than a
+code change, because no code change can close them with primitives
+GenLayer currently exposes; the rest were either fixed in code or
+confirmed, with evidence, not to apply.
+
+**Disclosed, not code-fixable — the trust model's real edges:**
+- **Neither consensus round checks for malicious intent.** Round 1
+  verifies legality (does this parse, is it structurally a valid GenVM
+  contract); round 2 verifies topical fit (does this plausibly attempt
+  what was asked). Neither asks "could this be a deliberately hidden
+  backdoor" — a prompt that describes something legitimate could still
+  yield code with, say, a hidden owner-drain method, and pass both rounds
+  with a high-confidence "yes," because it *is* structurally legal and
+  *does* plausibly address the request. This isn't a bug to patch; it's
+  what "checks legality and plausible intent, not safety" actually means
+  in practice, and it matters specifically because VULCAN's whole flow
+  ends with a user's own wallet deploying that code. `TransparencyPanel`
+  and the pre-deploy copy now say this explicitly — "not a guarantee the
+  code is bug-free" was true but under-stated the real risk; it now names
+  malicious/backdoored logic directly and tells the reader to read the
+  source before deploying anything that moves value.
+- **`mark_deployed`'s address is self-reported, not verified.** The
+  original sender supplies `contract_address` themselves; the contract
+  checks it's a well-formed 20-byte hex string and that the sender/
+  confidence/not-already-deployed conditions hold, but has no way to
+  confirm that address actually holds bytecode compiled from this
+  generation's `source` — GenVM doesn't expose a way for one contract to
+  read and compare another's deployed bytecode, and guessing at an
+  unverified primitive to fake that check would trade a disclosed
+  limitation for a false sense of verification. The dashboard now says so
+  directly next to every historical "Deployed" badge.
+
+**Disclosed as a lower-severity, structurally-present risk:**
+- **Second-order prompt injection between the two rounds.** `alignment_fn`
+  embeds round 1's own agreed `source` — itself shaped by the arbitrary
+  user prompt — directly into round 2's judgment prompt with no
+  sanitization. In principle a prompt could try to get the leader to embed
+  text in the generated source aimed at manipulating the alignment judge
+  (e.g., an instruction-shaped comment). `prompt_non_comparative`'s
+  consensus requirement means a single manipulated call doesn't flip the
+  round's result on its own, and the round is enrichment rather than a
+  hard gate either way, but the chain is real and worth naming rather than
+  assuming away.
+- **The dashboard is an unmoderated, permanent, public publishing
+  surface.** `prompt`, `summary`, and `alignment_reason` are all
+  arbitrary or LLM-shaped text, stored forever, rendered to every visitor
+  with no moderation or reporting path. React's default escaping rules
+  out XSS through these fields (confirmed — no other component uses
+  `dangerouslySetInnerHTML`), but a crafted prompt could still aim for
+  believable-looking scam or phishing copy hosted on a legitimate page.
+  Real gas cost per `generate()` call is the only friction; there's no
+  contract-level moderation, by design (adding one would mean picking a
+  centralized moderator, which cuts against the point of the project).
+
+**Found while verifying the fixes above, and fixed — a trust-model bug, not
+a classic vulnerability:** `DashboardClient.tsx` built its GenLayer client
+from `useVulcanClient()`, which returns `null` for anyone without a
+connected wallet — so the entire `/dashboard` page, including "All Forges"
+(documented everywhere in this repo as needing no wallet, on-chain-only,
+no off-chain database), silently rendered nothing but a "Connect your
+wallet" prompt for any visitor who hadn't connected one. That directly
+contradicts the project's own stated design and the whole point of a
+public, on-chain-only dashboard: anyone should be able to verify what's
+actually stored without needing a wallet, same as the public `/g/[id]`
+page already correctly allowed via `getReadOnlyVulcanClient()`. Fixed by
+using that same wallet-free client for every read (`loadAllBatch`,
+`loadMine`, `loadMore`) and only gating the "My Forges" tab specifically
+(which needs a connected address to know whose index to read) — verified
+live: the dashboard now loads and displays the real on-chain generation
+with no wallet connected, matching the docs.
+
+**Checked and confirmed not exploitable:**
+- `CodeViewer.tsx`'s `dangerouslySetInnerHTML` renders shiki's
+  `codeToHtml()` output over arbitrary (including attacker-supplied)
+  source — shiki escapes the code it tokenizes as text, the same pattern
+  used by VitePress/Astro/Nextra/shadcn's own docs sites; it's not an
+  injection point. No other component in the frontend uses
+  `dangerouslySetInnerHTML`.
+- No API routes or server actions exist anywhere in the app — every read
+  and write goes straight from the browser to the GenLayer RPC through
+  the connected wallet, so there's no backend to compromise.
+- No raw private key or seed phrase handling anywhere in the frontend;
+  every write is a standard EIP-1193 (`window.ethereum`) / WalletConnect
+  signature request through wagmi + RainbowKit, and nothing auto-signs.
+- `?prompt=`/`?open=` query params only ever flow into React state or a
+  lookup key, never into HTML or a navigation target; `RefineButton`
+  properly `encodeURIComponent`s its generated link.
+- Every external `target="_blank"` link pairs with `rel="noreferrer"`.
+- `pnpm audit --prod` found 18 advisories (5 high, 13 moderate). Traced
+  each one rather than reporting the count blindly: 10 (axios) and 2 (ws)
+  are transitive through wagmi/RainbowKit's wallet-connector stack, and
+  one resolved `ws@8.18.0` was genuinely runtime-reachable (WalletConnect's
+  relay connection, live via `@walletconnect/jsonrpc-ws-connection`) with
+  a real memory-exhaustion DoS advisory; `postcss` (3) and `uuid` (1) are
+  build-time-only paths VULCAN never exercises with attacker-controlled
+  input. Fixed the reachable ones with a `pnpm-workspace.yaml` override
+  pinning `ws`/`axios`/`postcss`/`uuid` to patched ranges — narrows only
+  the transitive resolution, doesn't touch the pinned direct wagmi/
+  RainbowKit/viem versions — which brought the count to 1 (a `sharp`
+  advisory reachable only through Next's own image-optimization pipeline,
+  which VULCAN never triggers since there's no image-upload feature;
+  left alone rather than overriding a version Next pins internally for a
+  surface this app doesn't expose). Also declined pnpm's build-approval
+  prompt for `bufferutil`/`utf-8-validate`/`keccak`'s native postinstall
+  scripts — all three are optional accelerators with pure-JS fallbacks
+  (`ws`, and viem's `ethereum-cryptography`/`@noble/hashes`), so there's
+  no reason to run third-party native build scripts to get them.
+- Added baseline security headers (`next.config.ts`) that didn't exist
+  before: `frame-ancestors 'none'` / `X-Frame-Options: DENY` against
+  clickjacking a page whose buttons trigger real wallet transactions,
+  plus `X-Content-Type-Options: nosniff` and a `Referrer-Policy`. Neither
+  Next.js nor Vercel sets these by default.
+
 ## Independent audit findings and fixes
 
 Before submission, six independent zero-bias reviews (contract

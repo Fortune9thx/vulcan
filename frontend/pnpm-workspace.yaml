@@ -1,6 +1,24 @@
+# Native build scripts left unapproved (pnpm's supply-chain gate) --
+# bufferutil/utf-8-validate are ws's optional native accelerators (ws
+# falls back to a pure-JS implementation without them) and keccak is an
+# optional native-accelerated hash used by the viem/ethereum-cryptography
+# stack (falls back to @noble/hashes' pure-JS keccak). None of the three
+# are required for correctness, so running their third-party postinstall
+# scripts isn't worth it -- verified the app still builds and runs
+# correctly without them.
 allowBuilds:
-  bufferutil: true
-  keccak: true
-  sharp: false
-  unrs-resolver: false
-  utf-8-validate: true
+  bufferutil: false
+  keccak: false
+  utf-8-validate: false
+# Security-audit dependency pins: force safe patch versions of packages
+# that are only ever pulled in transitively (wagmi/rainbowkit's wallet
+# connector stack, Next's CSS pipeline) but resolve to a range with a
+# known advisory. None of these are direct dependencies -- this only
+# narrows which patch version pnpm picks, it doesn't change any
+# already-verified direct dependency (wagmi/rainbowkit/viem stay pinned
+# as-is; see rainbowkit-wagmi-nextjs-gotchas memory).
+overrides:
+  ws: ">=8.21.0"
+  axios: ">=1.18.0"
+  postcss: ">=8.5.23"
+  uuid: ">=11.1.1"

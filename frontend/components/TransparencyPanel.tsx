@@ -20,7 +20,12 @@ const ALIGNMENT_RULES = [
   "A second, independent consensus round (gl.eq_principle.prompt_non_comparative) " +
     "judges whether the source reasonably attempts the request",
   'Classified as "yes", "partial", or "no" with a short stated reason',
-  "This is a self-reported judgment surfaced transparently, not a guarantee the code is bug-free",
+  "Neither round is a security audit: they check legality and topical fit, not " +
+    "whether the logic is safe, bug-free, or free of anything deliberately malicious " +
+    "-- read the source yourself before deploying, especially any code that moves " +
+    "value or names an address",
+  "A generation's \"Deployed\" address is self-reported by whoever called " +
+    "mark_deployed and isn't independently verified against the source on-chain",
 ];
 
 export function TransparencyPanel() {

@@ -3,6 +3,25 @@ import webpack from "webpack";
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: __dirname,
+  async headers() {
+    // Every write in this app is a real wallet-signed transaction
+    // (generate / deploy / mark_deployed) triggered from a button click --
+    // frame-ancestors 'none' stops the page from being embedded in a
+    // hidden/disguised iframe on another site for a clickjacking attempt
+    // against those buttons. The rest are standard baseline hardening;
+    // Next/Vercel set none of these by default.
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+        ],
+      },
+    ];
+  },
   webpack: (config) => {
     // wagmi's default connector set transitively pulls in the Coinbase
     // Base Account connector -> @coinbase/cdp-sdk -> optional @x402/*

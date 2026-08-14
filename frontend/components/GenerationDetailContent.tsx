@@ -96,6 +96,12 @@ export function GenerationDetailContent({
                 </a>
               )}
             </div>
+            {alreadyDeployed && !(state === "done" && deployedAddress) && (
+              <p className="mt-2 text-xs text-text-muted">
+                Self-reported by the generation&apos;s original sender via mark_deployed — Vulcan
+                doesn&apos;t independently verify this address holds this generation&apos;s bytecode.
+              </p>
+            )}
           </div>
         ) : state === "deploying" || state === "recording" ? (
           <div className="flex flex-col items-center py-2">

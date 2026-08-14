@@ -83,6 +83,38 @@ unhandled `AttributeError`, confirmed empirically via `gltest`, not just
 theorized) and an access-control gap in `mark_deployed`. Full detail in
 `docs/ARCHITECTURE.md`.
 
+## Security audit
+
+A separate pass, after the correctness-focused independent audit above,
+looked specifically at compromise: contract attack surface, prompt
+injection (direct and indirect), frontend XSS/wallet-interaction risk,
+and dependency supply chain. Full detail and evidence in
+`docs/ARCHITECTURE.md`'s "Security audit" section. Headline points:
+
+- The two consensus rounds check legality and topical fit, never
+  malicious intent — a legitimate-sounding request could still yield
+  code with hidden malicious logic and pass both rounds. This is a real
+  edge of the trust model, not a bug; closed by disclosing it plainly
+  (in-app and in docs) rather than claiming a guarantee no current
+  GenLayer primitive can actually back.
+- `mark_deployed`'s recorded address is self-reported by the original
+  sender, with no on-chain way to verify it matches the generation's
+  source — now disclosed directly next to every "Deployed" badge on the
+  dashboard.
+- `pnpm audit` found 18 dependency advisories (5 high); traced each to
+  its actual reachability rather than reported blindly. One (`ws`, via
+  WalletConnect's live relay connection) was genuinely exploitable and is
+  now fixed via a version override; the rest were build-time-only paths
+  this app never exercises with attacker-controlled input. Down to 1
+  remaining (an unreachable, image-upload-only `sharp` advisory).
+- Confirmed, not just assumed: the shiki-rendered `dangerouslySetInnerHTML`
+  in `CodeViewer` is not an XSS vector (shiki escapes tokenized code), no
+  backend/API routes exist to compromise, and no raw key material is ever
+  handled by the frontend.
+- Added baseline security headers (`frame-ancestors`/`X-Frame-Options`,
+  `nosniff`, `Referrer-Policy`) — a page whose buttons trigger real wallet
+  transactions had none before this pass.
+
 ## Second consensus round: independent alignment verification
 
 The original design (documented in the Independent audit section above)
