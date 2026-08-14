@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { motion } from "framer-motion";
-import { AlertTriangle, ArrowRight, RotateCcw } from "lucide-react";
+import { AlertTriangle, ArrowRight, LayoutGrid, RotateCcw } from "lucide-react";
 import { TransactionStatus } from "genlayer-js/types";
 import type { GenLayerChain, GenLayerClient, GenLayerTransaction } from "genlayer-js/types";
 import { ConsensusVisualizer } from "@/components/ConsensusVisualizer";
 import { CodeViewer } from "@/components/CodeViewer";
 import { RefineButton } from "@/components/RefineButton";
+import { ResultSummaryStrip } from "@/components/ResultSummaryStrip";
 import { TransparencyPanel } from "@/components/TransparencyPanel";
 import { ValidatorCards } from "@/components/ValidatorCards";
 import { Button } from "@/components/ui/button";
@@ -139,15 +141,33 @@ export function GenerationStage({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4 }}
-      className="mx-auto flex w-full max-w-5xl flex-col gap-6"
+      className="mx-auto flex w-full max-w-5xl flex-col gap-8"
     >
+      <div>
+        <p className="mb-3 flex items-center gap-1.5 text-xs font-medium text-amber-600">
+          <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+          Generation successful
+        </p>
+        <h1 className="font-serif text-4xl leading-tight tracking-tight text-text-primary sm:text-5xl">
+          Contract generated successfully.
+        </h1>
+        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-text-secondary">
+          VULCAN forged a contract under real multi-validator consensus and validated it against
+          {" "}{prompt.length > 60 ? "your request" : `"${prompt}"`}.
+        </p>
+      </div>
+
       <div className="grid gap-5 lg:grid-cols-2">
         <div className="glass-panel rounded-2xl p-5">
-          <h2 className="mb-2 font-mono text-xs uppercase tracking-wide text-text-muted">Prompt</h2>
+          <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-text-muted">
+            Original prompt
+          </h2>
           <p className="text-sm leading-relaxed text-text-secondary">{prompt}</p>
         </div>
         <CodeViewer code={record!.source} className="glass-panel" />
       </div>
+
+      <ResultSummaryStrip confidence={record!.confidence} alignment={record!.alignment} />
 
       <ValidatorCards
         summary={record!.summary}
@@ -158,12 +178,21 @@ export function GenerationStage({
 
       <TransparencyPanel />
 
-      <div className="flex flex-wrap items-center justify-end gap-4">
-        <RefineButton prompt={prompt} source={record!.source} />
-        <Button size="lg" onClick={() => onContinue(record!, resolvedIdRef.current)}>
-          Continue to deploy
-          <ArrowRight size={16} />
-        </Button>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <Link
+          href={`/dashboard?open=${resolvedIdRef.current}`}
+          className="flex items-center gap-1.5 text-sm font-medium text-text-secondary transition-colors hover:text-text-primary"
+        >
+          <LayoutGrid size={14} />
+          View in Dashboard
+        </Link>
+        <div className="flex flex-wrap items-center gap-4">
+          <RefineButton prompt={prompt} source={record!.source} />
+          <Button size="lg" onClick={() => onContinue(record!, resolvedIdRef.current)}>
+            Continue to deploy
+            <ArrowRight size={16} />
+          </Button>
+        </div>
       </div>
     </motion.div>
   );
