@@ -33,7 +33,7 @@ export function PromptStage({
       className="mx-auto flex w-full max-w-2xl flex-col items-center gap-10 py-10"
     >
       <div className="text-center">
-        <h1 className="font-serif text-5xl italic leading-[1.05] tracking-tight text-text-primary sm:text-6xl">
+        <h1 className="font-serif text-5xl leading-[1.05] tracking-tight text-text-primary sm:text-6xl">
           Describe it. Forge it.
           <br />
           Deploy it under consensus.

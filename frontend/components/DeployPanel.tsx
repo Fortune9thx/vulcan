@@ -43,7 +43,7 @@ export function DeployPanel({
       className="mx-auto flex w-full max-w-xl flex-col gap-5"
     >
       <div className="glass-panel rounded-2xl p-6 text-center">
-        <h2 className="font-serif text-2xl italic text-text-primary">Finalize</h2>
+        <h2 className="font-serif text-2xl text-text-primary">Finalize</h2>
         <p className="mt-2 text-sm text-text-secondary">
           Copy the generated source, or deploy it directly to GenLayer Bradbury with your connected wallet.
         </p>
@@ -99,7 +99,7 @@ function DeploySuccess({ address }: { address: string }) {
       >
         <Rocket className="text-amber-400" size={24} />
       </motion.div>
-      <h2 className="font-serif text-2xl italic amber-gradient-text">Deployed under consensus</h2>
+      <h2 className="font-serif text-2xl amber-gradient-text">Deployed under consensus</h2>
       <p className="font-mono text-sm text-text-secondary">{truncateAddress(address, 8)}</p>
       {explorerUrl && (
         <a

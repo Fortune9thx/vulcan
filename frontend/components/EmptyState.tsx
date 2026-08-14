@@ -28,7 +28,7 @@ export function EmptyState({
       <div className="flex h-14 w-14 items-center justify-center rounded-full bg-amber-400/10">
         <Icon className="text-amber-400" size={24} />
       </div>
-      <h3 className="font-serif text-xl italic text-text-primary">{title}</h3>
+      <h3 className="font-serif text-xl text-text-primary">{title}</h3>
       <p className="text-sm text-text-secondary">{description}</p>
       {actionLabel && (href || onAction) && (
         <Button asChild={!!href} onClick={onAction} className="mt-2">

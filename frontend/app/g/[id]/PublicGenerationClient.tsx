@@ -72,7 +72,7 @@ export function PublicGenerationClient({ id }: { id: string }) {
           </motion.div>
         ) : (
           <>
-            <h1 className="mb-6 font-serif text-3xl italic text-text-primary">Generation #{entry.id}</h1>
+            <h1 className="mb-6 font-serif text-3xl text-text-primary">Generation #{entry.id}</h1>
             <GenerationDetailContent entry={entry} client={walletClient} onDeployed={handleDeployed} />
           </>
         )}

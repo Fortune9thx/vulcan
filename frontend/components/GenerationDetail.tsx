@@ -39,7 +39,7 @@ export function GenerationDetail({
         <Dialog.Content className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col overflow-y-auto border-l border-border bg-void-raised p-6 shadow-xl focus:outline-none sm:p-8">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <Dialog.Title className="font-serif text-2xl italic text-text-primary">
+              <Dialog.Title className="font-serif text-2xl text-text-primary">
                 Generation #{entry.id}
               </Dialog.Title>
               <Dialog.Description className="mt-1 font-mono text-xs text-text-muted">

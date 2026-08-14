@@ -36,7 +36,7 @@ export function DashboardStats({
           className="glass-panel rounded-xl px-4 py-3.5"
         >
           <p className="font-mono text-[10px] uppercase tracking-wide text-text-muted">{tile.label}</p>
-          <p className="mt-1 font-serif text-2xl italic text-text-primary">{tile.value}</p>
+          <p className="mt-1 font-serif text-2xl text-text-primary">{tile.value}</p>
           {tile.hint && <p className="mt-0.5 font-mono text-[10px] text-text-muted">{tile.hint}</p>}
         </motion.div>
       ))}
