@@ -223,6 +223,18 @@ confirmed, with evidence, not to apply.
   code is bug-free" was true but under-stated the real risk; it now names
   malicious/backdoored logic directly and tells the reader to read the
   source before deploying anything that moves value.
+  **Empirically confirmed, not just argued:**
+  `tests/direct/test_vulcan_redteam.py` runs a real `TipJar` contract
+  through the actual `is_valid_generation` validator and the actual
+  `parse_alignment`/alignment round — a `tip()` method plus an
+  unrestricted `withdraw_to(address)` that sends the entire contract
+  balance to any caller-supplied address, no access control at all. Both
+  tests pass: the structural validator accepts it (it's real, valid,
+  legally-typed GenVM Python), and the alignment mock can rate it "yes."
+  The model-behavior half of this risk — whether a real LLM would ever
+  actually produce such a thing — is a separate, standing question this
+  test doesn't and can't answer; what it proves is that nothing
+  downstream of the model would catch it if it did.
 - **`mark_deployed`'s address is self-reported, not verified.** The
   original sender supplies `contract_address` themselves; the contract
   checks it's a well-formed 20-byte hex string and that the sender/
