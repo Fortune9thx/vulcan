@@ -35,22 +35,48 @@ def _is_gl_contract_base(node) -> bool:
     return isinstance(node, ast.Attribute) and node.attr == "Contract"
 
 
+_ILLEGAL_BARE_CONTAINER_NAMES = ("list", "dict", "List", "Dict")
+
+
 def _annotation_is_illegal_storage_type(annotation) -> bool:
-    # Catches bare list[]/dict[] by their real syntactic role (a class-level
-    # storage annotation), not by scanning for the substring anywhere in the
-    # file -- a substring check also rejects ordinary code that merely names
-    # a variable `my_list`, and can't tell a real annotation from the same
-    # text sitting inert in a comment or docstring.
+    # Catches list[]/dict[] (and their typing.List/typing.Dict spellings --
+    # the same illegal type at runtime, so both must be caught) by their
+    # real syntactic role (a class-level storage annotation), not by
+    # scanning for the substring anywhere in the file -- a substring check
+    # also rejects ordinary code that merely names a variable `my_list`,
+    # and can't tell a real annotation from the same text sitting inert in
+    # a comment or docstring.
+    #
+    # An adversarial probe (tests/direct/test_vulcan_redteam.py) proved a
+    # bare `items: list` (no subscript at all) or `items: List[str]`
+    # (typing's capitalized alias) both sailed through the original
+    # subscript-only check below -- neither is a legal GenVM storage type
+    # in any spelling, so both must be caught here, not just the lowercase
+    # subscripted form.
+    if isinstance(annotation, ast.Name) and annotation.id in _ILLEGAL_BARE_CONTAINER_NAMES:
+        return True
     if not isinstance(annotation, ast.Subscript):
         return False
     value = annotation.value
-    if isinstance(value, ast.Name) and value.id in ("list", "dict"):
+    value_name = None
+    if isinstance(value, ast.Name):
+        value_name = value.id
+    elif isinstance(value, ast.Attribute):
+        # typing.List[...] / typing.Dict[...] written as an attribute
+        # access rather than imported by name.
+        value_name = value.attr
+    if value_name in _ILLEGAL_BARE_CONTAINER_NAMES:
         return True
-    if isinstance(value, ast.Name) and value.id == "TreeMap":
+    if value_name == "TreeMap":
         # Only TreeMap[str, str] is reliable on Bradbury -- every other
-        # value type deploys cleanly but the contract becomes permanently
+        # VALUE type deploys cleanly but the contract becomes permanently
         # unreadable afterward. Reject anything else at generation time so
-        # Vulcan can never hand out a self-bricking contract.
+        # Vulcan can never hand out a self-bricking contract. The key type
+        # is held to the same str-only rule here too, deliberately more
+        # conservative than the documented bug strictly requires (only the
+        # value type was pilot-tested as unsafe) -- a non-str key type like
+        # TreeMap[Address, str] has never been independently verified safe
+        # either, and guessing it's fine isn't a risk worth taking here.
         slice_node = annotation.slice
         elements = slice_node.elts if isinstance(slice_node, ast.Tuple) else [slice_node]
         if len(elements) != 2 or not all(isinstance(e, ast.Name) and e.id == "str" for e in elements):

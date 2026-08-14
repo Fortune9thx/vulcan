@@ -165,6 +165,41 @@ class TestValidatorStructuralGate:
         contract.generate(VALID_PROMPT)
         assert direct_vm.run_validator(index=0) is False
 
+    def test_unsubscripted_bare_list_annotation_rejected(self, contract, direct_vm):
+        # A red-team probe found this slipping through the original check,
+        # which only inspected subscripted (list[...]) annotations -- a
+        # bare `items: list` (no brackets at all) is just as illegal a
+        # GenVM storage type and was never illegal to spell that way.
+        bad_source = VALID_SOURCE + "    items: list\n"
+        _mock_leader(direct_vm, _generation_payload(source=bad_source))
+        contract.generate(VALID_PROMPT)
+        assert direct_vm.run_validator(index=0) is False
+
+    def test_unsubscripted_bare_dict_annotation_rejected(self, contract, direct_vm):
+        bad_source = VALID_SOURCE + "    meta: dict\n"
+        _mock_leader(direct_vm, _generation_payload(source=bad_source))
+        contract.generate(VALID_PROMPT)
+        assert direct_vm.run_validator(index=0) is False
+
+    def test_typing_list_annotation_rejected(self, contract, direct_vm):
+        # typing.List/Dict are the same illegal storage type as bare
+        # list/dict at runtime -- another gap the same red-team probe found:
+        # the check only matched the lowercase builtin spelling.
+        bad_source = VALID_SOURCE.replace(
+            "from genlayer import *\n", "from genlayer import *\nfrom typing import List\n"
+        ) + "    items: List[str]\n"
+        _mock_leader(direct_vm, _generation_payload(source=bad_source))
+        contract.generate(VALID_PROMPT)
+        assert direct_vm.run_validator(index=0) is False
+
+    def test_typing_dict_annotation_rejected(self, contract, direct_vm):
+        bad_source = VALID_SOURCE.replace(
+            "from genlayer import *\n", "from genlayer import *\nfrom typing import Dict\n"
+        ) + "    meta: Dict[str, str]\n"
+        _mock_leader(direct_vm, _generation_payload(source=bad_source))
+        contract.generate(VALID_PROMPT)
+        assert direct_vm.run_validator(index=0) is False
+
     def test_empty_source_rejected(self, contract, direct_vm):
         _mock_leader(direct_vm, _generation_payload(source=""))
         contract.generate(VALID_PROMPT)
