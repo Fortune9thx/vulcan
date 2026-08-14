@@ -183,11 +183,25 @@ export async function fetchDeployedAddress(
   return String(deployed ?? "");
 }
 
-/** Terminal statuses after which polling should stop. */
+/**
+ * Terminal statuses after which polling should stop -- matches
+ * genlayer-js's own DECIDED_STATES classification (minus ACCEPTED, which
+ * this app deliberately keeps polling past: ACCEPTED can still be
+ * appealed and reversed before FINALIZED, and stopping there hasn't been
+ * verified safe against a read racing finalization). VALIDATORS_TIMEOUT
+ * and LEADER_TIMEOUT are real terminal outcomes the SDK itself already
+ * classifies as decided -- omitting them here isn't a smaller polling
+ * window, it's the caller ground through the full maxAttempts budget
+ * waiting for a status change that will never come, then surfacing a
+ * generic "timed out waiting" error instead of the real, specific,
+ * already-available reason.
+ */
 const TERMINAL_STATUSES = new Set<TransactionStatus>([
   TransactionStatus.FINALIZED,
   TransactionStatus.UNDETERMINED,
   TransactionStatus.CANCELED,
+  TransactionStatus.VALIDATORS_TIMEOUT,
+  TransactionStatus.LEADER_TIMEOUT,
 ]);
 
 export interface ConsensusTick {

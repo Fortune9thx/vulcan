@@ -67,6 +67,14 @@ export function GenerationStage({
           setError("The transaction was canceled.");
           return;
         }
+        if (finalTx.statusName === TransactionStatus.LEADER_TIMEOUT) {
+          setError("The leader timed out producing a result. Try again.");
+          return;
+        }
+        if (finalTx.statusName === TransactionStatus.VALIDATORS_TIMEOUT) {
+          setError("Validators timed out reaching consensus on this generation. Try again.");
+          return;
+        }
 
         // generation_id is assigned during the transaction's own execution,
         // not at submission time -- if another generate() call landed in
