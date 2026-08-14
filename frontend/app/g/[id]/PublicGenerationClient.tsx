@@ -55,7 +55,7 @@ export function PublicGenerationClient({ id }: { id: string }) {
       <ParticleField state="idle" />
       <AppNav />
 
-      <main className="relative z-10 mx-auto w-full max-w-2xl flex-1 px-6 py-8 sm:px-10">
+      <main className="relative z-10 mx-auto w-full max-w-5xl flex-1 px-6 py-8 sm:px-10">
         {loading ? (
           <div className="flex items-center gap-2 font-mono text-sm text-text-muted">
             <Loader2 className="animate-spin" size={16} />

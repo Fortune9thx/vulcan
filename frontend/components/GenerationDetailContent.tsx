@@ -8,6 +8,7 @@ import { AlignmentBadge } from "@/components/AlignmentBadge";
 import { CodeViewer } from "@/components/CodeViewer";
 import { ConsensusVisualizer } from "@/components/ConsensusVisualizer";
 import { RefineButton } from "@/components/RefineButton";
+import { ResultSummaryStrip } from "@/components/ResultSummaryStrip";
 import { TransparencyPanel } from "@/components/TransparencyPanel";
 import { Button } from "@/components/ui/button";
 import { useDeployGeneration } from "@/lib/useDeployGeneration";
@@ -53,28 +54,34 @@ export function GenerationDetailContent({
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      <div>
-        <h3 className="mb-2 font-mono text-[10px] uppercase tracking-wide text-text-muted">Prompt</h3>
-        <p className="text-sm leading-relaxed text-text-secondary">{entry.prompt}</p>
-      </div>
+    <div className="flex flex-col gap-6">
+      <div className="grid gap-5 lg:grid-cols-2">
+        <div className="flex flex-col gap-5">
+          <div>
+            <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-text-muted">Prompt</h3>
+            <p className="text-sm leading-relaxed text-text-secondary">{entry.prompt}</p>
+          </div>
 
-      <div>
-        <h3 className="mb-2 font-mono text-[10px] uppercase tracking-wide text-text-muted">Summary</h3>
-        <p className="text-sm leading-relaxed text-text-secondary">{entry.summary || "No summary."}</p>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <span className={`font-mono text-xs ${passed ? "text-amber-400" : "text-danger"}`}>
-            confidence {entry.confidence}
-          </span>
-          <AlignmentBadge alignment={entry.alignment} />
+          <div>
+            <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-text-muted">Summary</h3>
+            <p className="text-sm leading-relaxed text-text-secondary">{entry.summary || "No summary."}</p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className={`text-xs font-medium ${passed ? "text-amber-500" : "text-danger"}`}>
+                confidence {entry.confidence}
+              </span>
+              <AlignmentBadge alignment={entry.alignment} />
+            </div>
+            <p className="mt-2 text-xs text-text-muted">{entry.alignmentReason}</p>
+          </div>
         </div>
-        <p className="mt-2 text-xs text-text-muted">{entry.alignmentReason}</p>
+
+        <div>
+          <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-text-muted">Source</h3>
+          <CodeViewer code={entry.source} className="glass-panel" />
+        </div>
       </div>
 
-      <div>
-        <h3 className="mb-2 font-mono text-[10px] uppercase tracking-wide text-text-muted">Source</h3>
-        <CodeViewer code={entry.source} className="glass-panel" />
-      </div>
+      <ResultSummaryStrip confidence={entry.confidence} alignment={entry.alignment} />
 
       <div className="glass-panel rounded-xl p-5">
         {alreadyDeployed || (state === "done" && deployedAddress) ? (
