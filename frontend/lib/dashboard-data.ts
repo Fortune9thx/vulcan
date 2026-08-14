@@ -1,5 +1,5 @@
 import type { GenLayerChain, GenLayerClient } from "genlayer-js/types";
-import { fetchDeployedAddress, fetchGeneration } from "./genlayer-client";
+import { fetchDeployedAddress, fetchGeneration, fetchUserGenerationIds } from "./genlayer-client";
 import type { GenerationRecord } from "./vulcan-abi";
 
 export const DASHBOARD_BATCH_SIZE = 16;
@@ -14,6 +14,8 @@ export interface DashboardEntry extends GenerationRecord {
  * many have already been loaded. Reads walk backwards from the highest id
  * (count - 1) so the dashboard never has to scan the whole history to show
  * recent activity -- "Load more" simply extends the window further back.
+ * Used for the "All Forges"/"Deployed only" tabs, which have no per-user
+ * index to consult.
  */
 export function nextIdWindow(totalCount: number, alreadyLoaded: number, batchSize = DASHBOARD_BATCH_SIZE): string[] {
   const start = totalCount - 1 - alreadyLoaded;
@@ -43,6 +45,32 @@ export async function fetchGenerationsWindow(
   return results.filter((entry): entry is DashboardEntry => entry !== null);
 }
 
+/**
+ * "My Forges", made exact via Vulcan.user_generations (Vulcan.py's
+ * on-chain personal index) instead of the batched-scan approximation
+ * fetchGenerationsWindow uses for "All Forges" -- a user's own generation
+ * count is small enough that fetching all of them directly is cheap, and
+ * it means "My Forges" is never limited to whatever the "All Forges" tab
+ * happened to have loaded.
+ */
+export async function fetchMyGenerations(
+  client: GenLayerClient<GenLayerChain>,
+  userAddress: string
+): Promise<DashboardEntry[]> {
+  const ids = await fetchUserGenerationIds(client, userAddress);
+  const entries = await Promise.all(
+    ids.map(async (id) => {
+      const [record, deployedAddress] = await Promise.all([
+        fetchGeneration(client, id),
+        fetchDeployedAddress(client, id),
+      ]);
+      if (!record) return null;
+      return { ...record, id, deployedAddress };
+    })
+  );
+  return entries.filter((entry): entry is DashboardEntry => entry !== null).reverse(); // newest first
+}
+
 export interface DashboardStats {
   totalGenerations: number;
   loadedCount: number;
@@ -52,25 +80,24 @@ export interface DashboardStats {
 }
 
 /**
- * Stats are computed from whatever's been loaded so far, not a full scan of
- * every generation ever made -- there's no off-chain index to query "all of
- * mine" cheaply, and scanning the entire history up front would defeat the
- * point of batched loading. totalGenerations alone comes from get_count()
- * and is always exact; the rest grow more accurate as more batches load.
+ * totalGenerations (get_count()) and myCount/myAverageConfidence (the
+ * on-chain personal index) are always exact. deployedCount is still
+ * computed from whatever's currently loaded in the "All Forges" batch --
+ * there's no on-chain "deployed" index, and scanning the entire history
+ * up front to make it exact would defeat the point of batched loading.
  */
-export function computeStats(entries: DashboardEntry[], totalGenerations: number, myAddress?: string): DashboardStats {
-  const mine = myAddress
-    ? entries.filter((e) => e.sender.toLowerCase() === myAddress.toLowerCase())
-    : [];
-  const deployed = entries.filter((e) => e.deployedAddress.length > 0);
-  const myConfidences = mine
-    .map((e) => Number.parseFloat(e.confidence))
-    .filter((c) => Number.isFinite(c));
+export function computeStats(
+  loadedEntries: DashboardEntry[],
+  myEntries: DashboardEntry[],
+  totalGenerations: number
+): DashboardStats {
+  const deployed = loadedEntries.filter((e) => e.deployedAddress.length > 0);
+  const myConfidences = myEntries.map((e) => Number.parseFloat(e.confidence)).filter((c) => Number.isFinite(c));
 
   return {
     totalGenerations,
-    loadedCount: entries.length,
-    myCount: mine.length,
+    loadedCount: loadedEntries.length,
+    myCount: myEntries.length,
     deployedCount: deployed.length,
     myAverageConfidence:
       myConfidences.length > 0 ? myConfidences.reduce((a, b) => a + b, 0) / myConfidences.length : null,
@@ -82,15 +109,12 @@ export type DashboardSort = "newest" | "confidence" | "deployed";
 
 export function filterAndSortEntries(
   entries: DashboardEntry[],
-  { tab, search, sort, myAddress }: { tab: DashboardTab; search: string; sort: DashboardSort; myAddress?: string }
+  { tab, search, sort }: { tab: DashboardTab; search: string; sort: DashboardSort }
 ): DashboardEntry[] {
-  let filtered = entries;
-
-  if (tab === "mine" && myAddress) {
-    filtered = filtered.filter((e) => e.sender.toLowerCase() === myAddress.toLowerCase());
-  } else if (tab === "deployed") {
-    filtered = filtered.filter((e) => e.deployedAddress.length > 0);
-  }
+  // tab === "mine" is handled by the caller passing myEntries directly --
+  // this only needs to further filter for "deployed", since "all" and
+  // "mine" both take their base entry list as given.
+  let filtered = tab === "deployed" ? entries.filter((e) => e.deployedAddress.length > 0) : entries;
 
   const query = search.trim().toLowerCase();
   if (query) {

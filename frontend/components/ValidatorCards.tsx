@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDown, Crown, ShieldCheck } from "lucide-react";
+import { ChevronDown, Crown, ShieldCheck, Sparkle } from "lucide-react";
+import { AlignmentBadge } from "@/components/AlignmentBadge";
 import { cn } from "@/lib/utils";
-import { CONFIDENCE_THRESHOLD } from "@/lib/vulcan-abi";
+import { CONFIDENCE_THRESHOLD, type Alignment } from "@/lib/vulcan-abi";
 
 const STRUCTURAL_CHECKS = [
   "Required imports and pinned runner header present",
@@ -13,7 +14,17 @@ const STRUCTURAL_CHECKS = [
   `Reported confidence at or above ${CONFIDENCE_THRESHOLD}`,
 ];
 
-export function ValidatorCards({ summary, confidence }: { summary: string; confidence: string }) {
+export function ValidatorCards({
+  summary,
+  confidence,
+  alignment,
+  alignmentReason,
+}: {
+  summary: string;
+  confidence: string;
+  alignment: Alignment;
+  alignmentReason: string;
+}) {
   const confidenceValue = Number.parseFloat(confidence);
   const passed = Number.isFinite(confidenceValue) && confidenceValue >= CONFIDENCE_THRESHOLD;
 
@@ -29,6 +40,26 @@ export function ValidatorCards({ summary, confidence }: { summary: string; confi
       >
         <p className="text-sm text-text-secondary">{summary || "No summary was returned for this generation."}</p>
         <ConfidenceMeter value={confidenceValue} />
+      </Card>
+
+      <Card
+        icon={<Sparkle size={15} className="text-amber-400" />}
+        title="Alignment judgment"
+        subtitle={alignmentReason || "No reasoning was provided."}
+        badge={alignment === "yes" ? "Aligned" : alignment === "partial" ? "Partial" : "Not aligned"}
+        badgeTone={alignment === "no" ? "danger" : "amber"}
+        defaultOpen
+      >
+        <p className="mb-2 text-xs text-text-muted">
+          A second, independent consensus round (gl.eq_principle.prompt_non_comparative) judged whether
+          this source reasonably attempts the request — a real check, distinct from the structural gate
+          below, but still a self-reported judgment surfaced transparently, not a guarantee the code is
+          bug-free.
+        </p>
+        <div className="flex items-center gap-2">
+          <AlignmentBadge alignment={alignment} />
+        </div>
+        <p className="mt-2 text-sm text-text-secondary">{alignmentReason}</p>
       </Card>
 
       {[1, 2, 3, 4].map((n) => (

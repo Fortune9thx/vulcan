@@ -4,7 +4,10 @@ export const VULCAN_METHODS = {
   getCount: "get_count",
   getDeployed: "get_deployed",
   markDeployed: "mark_deployed",
+  getUserGenerations: "get_user_generations",
 } as const;
+
+export type Alignment = "yes" | "partial" | "no";
 
 export interface GenerationRecord {
   prompt: string;
@@ -12,7 +15,11 @@ export interface GenerationRecord {
   summary: string;
   confidence: string;
   sender: string;
+  alignment: Alignment;
+  alignmentReason: string;
 }
+
+const VALID_ALIGNMENTS: Alignment[] = ["yes", "partial", "no"];
 
 export function parseGenerationRecord(raw: string): GenerationRecord | null {
   if (!raw || raw === "{}") return null;
@@ -29,16 +36,32 @@ export function parseGenerationRecord(raw: string): GenerationRecord | null {
       // generation, so it's worth a visible signal rather than a silent "".
       console.warn("Generation record has an unexpected shape for prompt/summary/sender.", data);
     }
+    const alignment: Alignment = VALID_ALIGNMENTS.includes(data.alignment) ? data.alignment : "no";
     return {
       prompt: typeof data.prompt === "string" ? data.prompt : "",
       source: data.source,
       summary: typeof data.summary === "string" ? data.summary : "",
       confidence: String(data.confidence ?? "0"),
       sender: typeof data.sender === "string" ? data.sender : "",
+      alignment,
+      // Older generations (pre-alignment-round contract versions) won't
+      // have this field -- default rather than show "undefined" in the UI.
+      alignmentReason:
+        typeof data.alignment_reason === "string" ? data.alignment_reason : "No reasoning was provided.",
     };
   } catch (err) {
     console.warn("Failed to parse generation record JSON.", err, raw);
     return null;
+  }
+}
+
+export function parseGenerationIdList(raw: string): string[] {
+  try {
+    const data = JSON.parse(raw);
+    if (!Array.isArray(data)) return [];
+    return data.filter((id): id is string => typeof id === "string");
+  } catch {
+    return [];
   }
 }
 

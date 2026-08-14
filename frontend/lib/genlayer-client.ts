@@ -6,12 +6,33 @@ import { createClient } from "genlayer-js";
 import { testnetBradbury } from "genlayer-js/chains";
 import { TransactionStatus } from "genlayer-js/types";
 import type { GenLayerClient, GenLayerChain, GenLayerTransaction, TransactionHash } from "genlayer-js/types";
-import { VULCAN_METHODS, getVulcanAddress, type GenerationRecord, parseGenerationRecord } from "./vulcan-abi";
+import {
+  VULCAN_METHODS,
+  getVulcanAddress,
+  type GenerationRecord,
+  parseGenerationRecord,
+  parseGenerationIdList,
+} from "./vulcan-abi";
 
 declare global {
   interface Window {
     ethereum?: unknown;
   }
+}
+
+let _readOnlyClient: GenLayerClient<GenLayerChain> | null = null;
+
+/**
+ * A wallet-free client for read-only pages (the public /g/[id] share
+ * page) -- confirmed working: createClient({chain}) with no account/
+ * provider successfully executes readContract calls, since Vulcan's view
+ * methods need no signer at all. Never use this for writes.
+ */
+export function getReadOnlyVulcanClient(): GenLayerClient<GenLayerChain> {
+  if (!_readOnlyClient) {
+    _readOnlyClient = createClient({ chain: testnetBradbury });
+  }
+  return _readOnlyClient;
 }
 
 export function useVulcanClient(): {
@@ -129,6 +150,25 @@ export async function fetchGenerationCount(client: GenLayerClient<GenLayerChain>
     args: [],
   });
   return Number(count);
+}
+
+/**
+ * The on-chain personal index (Vulcan.user_generations) -- returns this
+ * user's generation ids directly, newest last, with no scanning at all.
+ * Used to make "My Forges" exact rather than limited to whatever batch
+ * happens to be loaded (see fetchGenerationsWindow's fallback path in
+ * dashboard-data.ts for users who forged before this index existed).
+ */
+export async function fetchUserGenerationIds(
+  client: GenLayerClient<GenLayerChain>,
+  userAddress: string
+): Promise<string[]> {
+  const raw = await client.readContract({
+    address: getVulcanAddress(),
+    functionName: VULCAN_METHODS.getUserGenerations,
+    args: [userAddress],
+  });
+  return parseGenerationIdList(String(raw));
 }
 
 export async function fetchDeployedAddress(

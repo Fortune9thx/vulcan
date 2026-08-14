@@ -7,6 +7,8 @@ import { TransactionStatus } from "genlayer-js/types";
 import type { GenLayerChain, GenLayerClient, GenLayerTransaction } from "genlayer-js/types";
 import { ConsensusVisualizer } from "@/components/ConsensusVisualizer";
 import { CodeViewer } from "@/components/CodeViewer";
+import { RefineButton } from "@/components/RefineButton";
+import { TransparencyPanel } from "@/components/TransparencyPanel";
 import { ValidatorCards } from "@/components/ValidatorCards";
 import { Button } from "@/components/ui/button";
 import { fetchGeneration, pollConsensusStatus, resolveGenerationId } from "@/lib/genlayer-client";
@@ -139,9 +141,17 @@ export function GenerationStage({
         <CodeViewer code={record!.source} className="glass-panel" />
       </div>
 
-      <ValidatorCards summary={record!.summary} confidence={record!.confidence} />
+      <ValidatorCards
+        summary={record!.summary}
+        confidence={record!.confidence}
+        alignment={record!.alignment}
+        alignmentReason={record!.alignmentReason}
+      />
 
-      <div className="flex justify-end">
+      <TransparencyPanel />
+
+      <div className="flex flex-wrap items-center justify-end gap-4">
+        <RefineButton prompt={prompt} source={record!.source} />
         <Button size="lg" onClick={() => onContinue(record!, resolvedIdRef.current)}>
           Continue to deploy
           <ArrowRight size={16} />

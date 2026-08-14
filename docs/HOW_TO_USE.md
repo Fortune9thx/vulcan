@@ -47,10 +47,17 @@ pnpm dev
 ```
 
 Open http://localhost:3000, connect a wallet on Bradbury testnet, and
-describe a contract. Forging a contract submits a real transaction —
-watch the consensus visualizer track its actual status
-(`PENDING → PROPOSING → COMMITTING → REVEALING → ACCEPTED → FINALIZED`)
-rather than a simulated animation.
+describe a contract. Forging a contract submits a real transaction, and
+runs through two consensus rounds — code generation, then an independent
+alignment judgment — so it takes noticeably longer than a single-round
+write. Watch the consensus visualizer track the real status for each
+round (`PENDING → PROPOSING → COMMITTING → REVEALING → ACCEPTED →
+FINALIZED`, plus appeal/timeout states) rather than a simulated animation.
+The result view shows the generated source, the leader's confidence, and
+the independently-verified alignment judgment (`yes` / `partial` / `no` +
+a stated reason) side by side, along with a "What the validators checked"
+panel spelling out every structural rule and what the alignment round
+does and doesn't guarantee.
 
 ## 4. Deploy a generated contract
 
@@ -64,20 +71,33 @@ shows.
 
 ## 5. Browse the dashboard
 
-`/dashboard` reads live from `Vulcan` — `get_count`, `get_generation`, and
-`get_deployed`, batched 16 at a time, newest first ("Load more" fetches
-further back). No off-chain database is involved, so what you see is
-exactly what's on-chain right now:
+`/dashboard` reads live from `Vulcan` — no off-chain database is involved,
+so what you see is exactly what's on-chain right now:
 
-- **My Forges / All Forges / Deployed only** tabs, a search box, and a sort
-  dropdown, all client-side over whatever's currently loaded.
+- **My Forges** is exact: backed by `get_user_generations`, the on-chain
+  personal index, not a scan of whatever happened to be loaded.
+- **All Forges / Deployed only** batch 16 at a time newest-first
+  (`get_count` + `get_generation` + `get_deployed`), with "Load more"
+  fetching further back.
+- A search box and sort dropdown work client-side over whatever's
+  currently visible in the active tab.
 - Click a card to open its full source (copy button, syntax-highlighted),
-  deploy it if it hasn't been already, or **Forge a variant** — a deep link
-  back to the main page with the original prompt pre-filled.
+  its alignment judgment and reason, a "What the validators checked"
+  panel, deploy it if it hasn't been already, or **Forge a variant /
+  Refine** — pre-fills the main page with the original source embedded in
+  a refinement template (truncated if the combined length would exceed
+  the contract's 3500-character prompt limit).
 - After forging, a toast links straight back to the new entry's detail
   view via `/dashboard?open=<id>`.
 
-Because `My generations` / `Deployed` / `My avg. confidence` are computed
-from the loaded batch (not a full history scan), they're labeled "of N
-loaded" and fill in further as you click "Load more" — only `Total
-generations` is always exact.
+Because `Deployed` is computed from the loaded "All Forges" batch (not a
+full history scan), it's labeled "of N loaded" and fills in further as
+you click "Load more" — `Total generations` and `My generations` are
+always exact.
+
+## 6. Share a single generation
+
+Every generation has a public, wallet-free page at `/g/<generation_id>` —
+click the share icon in a detail drawer to copy the link. Viewing needs no
+wallet (reads use a wallet-free GenLayer client); deploying from that page
+still requires connecting one, same as everywhere else.

@@ -17,6 +17,7 @@ import {
   DASHBOARD_BATCH_SIZE,
   computeStats,
   fetchGenerationsWindow,
+  fetchMyGenerations,
   filterAndSortEntries,
   nextIdWindow,
   type DashboardEntry,
@@ -31,7 +32,9 @@ export function DashboardClient() {
 
   const [totalCount, setTotalCount] = useState<number | null>(null);
   const [entries, setEntries] = useState<DashboardEntry[]>([]);
+  const [myEntries, setMyEntries] = useState<DashboardEntry[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMine, setLoadingMine] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,7 +45,7 @@ export function DashboardClient() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [autoOpenedFor, setAutoOpenedFor] = useState<string | null>(null);
 
-  const loadInitial = useCallback(async () => {
+  const loadAllBatch = useCallback(async () => {
     if (!client) return;
     setLoading(true);
     setError(null);
@@ -59,22 +62,47 @@ export function DashboardClient() {
     }
   }, [client]);
 
+  // "My Forges" is exact (Vulcan.user_generations), fetched independently
+  // of the "All Forges" batch -- see docs/ARCHITECTURE.md for why this no
+  // longer has the "of N loaded" caveat the all-forges stats still do.
+  const loadMine = useCallback(async () => {
+    if (!client || !address) return;
+    setLoadingMine(true);
+    try {
+      const mine = await fetchMyGenerations(client, address);
+      setMyEntries(mine);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load your generations.");
+    } finally {
+      setLoadingMine(false);
+    }
+  }, [client, address]);
+
+  const refreshAll = useCallback(() => {
+    loadAllBatch();
+    loadMine();
+  }, [loadAllBatch, loadMine]);
+
   useEffect(() => {
-    loadInitial();
-  }, [loadInitial]);
+    loadAllBatch();
+  }, [loadAllBatch]);
+
+  useEffect(() => {
+    loadMine();
+  }, [loadMine]);
 
   // Deep-link support: ?open=<id> from the post-generate toast opens that
-  // generation's detail drawer as soon as it shows up in a loaded batch
-  // (it's always the newest, so it's in the very first one).
+  // generation's detail drawer as soon as it shows up (it's always the
+  // newest, so it's in both the first "all" batch and the "mine" index).
   useEffect(() => {
     if (!openId || openId === autoOpenedFor) return;
-    const match = entries.find((e) => e.id === openId);
+    const match = entries.find((e) => e.id === openId) ?? myEntries.find((e) => e.id === openId);
     if (match) {
       setSelected(match);
       setDetailOpen(true);
       setAutoOpenedFor(openId);
     }
-  }, [openId, entries, autoOpenedFor]);
+  }, [openId, entries, myEntries, autoOpenedFor]);
 
   async function loadMore() {
     // The button's disabled={loadingMore} only takes effect after React
@@ -96,12 +124,15 @@ export function DashboardClient() {
 
   function handleDeployed(generationId: string, deployedAddress: string) {
     setEntries((prev) => prev.map((e) => (e.id === generationId ? { ...e, deployedAddress } : e)));
+    setMyEntries((prev) => prev.map((e) => (e.id === generationId ? { ...e, deployedAddress } : e)));
     setSelected((prev) => (prev && prev.id === generationId ? { ...prev, deployedAddress } : prev));
   }
 
-  const stats = computeStats(entries, totalCount ?? 0, address);
-  const visible = filterAndSortEntries(entries, { tab, search, sort, myAddress: address });
+  const stats = computeStats(entries, myEntries, totalCount ?? 0);
+  const baseEntries = tab === "mine" ? myEntries : entries;
+  const visible = filterAndSortEntries(baseEntries, { tab, search, sort });
   const hasMore = totalCount !== null && entries.length < totalCount;
+  const currentlyLoading = tab === "mine" ? loadingMine : loading;
 
   return (
     <div className="relative flex min-h-screen flex-col overflow-hidden">
@@ -125,7 +156,7 @@ export function DashboardClient() {
           />
         ) : (
           <>
-            <DashboardStats stats={stats} onRefresh={loadInitial} refreshing={loading} />
+            <DashboardStats stats={stats} onRefresh={refreshAll} refreshing={loading || loadingMine} />
 
             <div className="my-6">
               <DashboardFilters
@@ -140,7 +171,7 @@ export function DashboardClient() {
 
             {error && <p className="mb-4 font-mono text-xs text-danger">{error}</p>}
 
-            {loading && entries.length === 0 ? (
+            {currentlyLoading && baseEntries.length === 0 ? (
               <SkeletonGrid />
             ) : visible.length === 0 ? (
               <EmptyStateForTab tab={tab} totalCount={totalCount ?? 0} />

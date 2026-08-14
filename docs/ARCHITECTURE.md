@@ -13,44 +13,90 @@ perform any AI work itself — it submits a transaction, watches the real
 transaction status progress through consensus, and reads back whatever the
 contract actually stored.
 
-## Consensus flow
+## Consensus flow: two independent rounds
 
-`generate(prompt)` calls `gl.vm.run_nondet_unsafe(leader, validator)`:
+`generate(prompt)` runs two separate non-deterministic consensus rounds,
+sequentially, each using the GenLayer primitive actually built for its job.
 
+**Round 1 — code generation (`gl.vm.run_nondet_unsafe(leader, validator)`).**
 - `leader()` calls `gl.nondet.exec_prompt(system_prompt, response_format="json")`,
   asking the model for `{source, summary, confidence}` as JSON.
 - `validator(leaders_res)` receives the leader's result wrapped as
-  `gl.vm.Return` and independently checks it against
-  `is_valid_generation`: the reported confidence must parse as a float
-  `>= 0.55`, the source must contain the required GenLayer scaffolding
-  (`from genlayer import *`, a `gl.Contract` base, at least one
-  `@gl.public.*` decorator, the pinned runner dependency string), and must
-  not contain bare `list[`/`dict[` storage types. Every validator in the
-  round runs this same deterministic check against the same leader output —
-  it doesn't re-generate its own answer and diff it against the leader's,
-  which would fail non-deterministically for creative code generation
-  (two independently generated implementations of the same request are
-  rarely byte-identical, so a regenerate-and-compare validator would reject
-  good output almost as often as bad output). Structural/confidence
-  validation is deterministic given the same leader output, so every
-  honest validator reaches the same verdict — which is what GenLayer's
-  consensus actually needs.
-- Only if enough validators agree does the write succeed and the record get
-  stored in `generations: TreeMap[str, str]` as a JSON string.
+  `gl.vm.Return` and checks it against `is_valid_generation`: the reported
+  confidence must parse as a *finite* float `>= 0.55` (`math.isfinite` --
+  `float("nan") < 0.55` is `False` in Python, so NaN/Infinity need an
+  explicit check or they'd sail through), the source must start with the
+  exact pinned header, parse as valid Python (`ast.parse`), contain a real
+  `from genlayer import *`, a real class inheriting `gl.Contract`, at
+  least one method with a real `@gl.public.*` decorator, and no class-level
+  storage annotation using bare `list`/`dict` or a `TreeMap` value type
+  other than `str`. This is real AST inspection, not a text scan --
+  earlier versions of this check used substring matching, which a crafted
+  prompt could defeat by burying the required fragments in a comment with
+  no real code around them (closed in the independent-audit pass below,
+  verified by a test that constructs exactly that comment-only case).
+  Every validator in the round runs this same deterministic check against
+  the same leader output — it doesn't re-generate its own answer and diff
+  it against the leader's, which would fail non-deterministically for
+  creative code generation (two independent implementations of the same
+  request are rarely byte-identical).
+- Only if enough validators agree does the round succeed. `generate()`
+  explicitly checks for a `None` result before touching it — confirmed
+  empirically (not theorized) that a leader response failing GenVM's own
+  calldata encoding makes `run_nondet_unsafe` resolve to `None` rather than
+  raise a Python exception inside `leader()`, so a `try/except` there
+  cannot catch it.
 
-On the frontend, this maps directly onto GenLayer's real, documented
-transaction lifecycle (`genlayer-js/types`'s `TransactionStatus` enum):
-`PENDING → PROPOSING → COMMITTING → REVEALING → ACCEPTED → FINALIZED`, with
-`UNDETERMINED`/`CANCELED` as off-path outcomes. `ConsensusVisualizer`
+**Round 2 — alignment judgment (`gl.eq_principle.prompt_non_comparative`).**
+Once round 1's source/summary/confidence are agreed, a second, independent
+round judges whether that *already-approved* source reasonably attempts
+the original request:
+- `alignment_fn()` asks the model to classify `"yes"`/`"partial"`/`"no"`
+  with a short reason, given the prompt and the agreed source, and returns
+  it JSON-encoded as a string (required by `prompt_non_comparative` --
+  unlike `run_nondet_unsafe`, it needs `str`, not a dict).
+- Every validator calls `alignment_fn()` independently (a fresh LLM call
+  each time); GenLayer's own equivalence mechanism -- not this contract's
+  code -- decides whether their judgments agree, per the `task`/`criteria`
+  text passed to `prompt_non_comparative`.
+- This is the platform-sanctioned mechanism for this pattern, not a
+  hand-rolled one: a prior project's validator that made its own second
+  `exec_prompt` call and compared results in plain Python hit a real,
+  live `DETERMINISTIC_VIOLATION` on Bradbury's consensus protocol.
+  `prompt_non_comparative` exists specifically to avoid that failure mode.
+- `parse_alignment` defensively parses the round's result; a malformed or
+  missing classification defaults to a clearly-labeled `"no"` rather than
+  discarding an already-consensus-approved generation -- this round is
+  enrichment, not a second hard gate on `generate()` succeeding.
+- Verified live on Bradbury, not just in `gltest`'s mock: a real
+  transaction produced `alignment: "yes"`, `alignment_reason: "The
+  contract has a greeting string, a getter, and a setter as requested"` --
+  a genuine, coherent, independently-derived judgment. The same
+  transaction's `lastRound` showed 4/5 validators voting `AGREE` and 1
+  `TIMEOUT`, a real, disclosed cost: two consensus rounds mean more
+  wall-clock time and LLM calls than one, and that occasionally shows up
+  as a validator timing out under real network conditions.
+
+Both rounds' results are stored together in `generations: TreeMap[str, str]`
+as one JSON record, and the sender's `generation_id` is appended to
+`user_generations: TreeMap[str, str]` (a JSON array per address) for the
+dashboard's exact "My Forges" index.
+
+On the frontend, transaction progress maps directly onto GenLayer's real,
+documented transaction lifecycle (`genlayer-js/types`'s `TransactionStatus`
+enum): `PENDING → PROPOSING → COMMITTING → REVEALING → ACCEPTED →
+FINALIZED`, with `UNDETERMINED`/`CANCELED`/`VALIDATORS_TIMEOUT`/
+`LEADER_TIMEOUT` as off-path outcomes, plus `APPEAL_COMMITTING` /
+`APPEAL_REVEALING` / `READY_TO_FINALIZE` for the post-acceptance appeal
+path -- all 14 real values are handled explicitly (an earlier version
+silently treated 5 of them as "nothing has started yet"). `ConsensusVisualizer`
 polls the real transaction via `client.getTransaction({ hash })` and
-animates its 5-node pentagon directly off these values — `PROPOSING`
-highlights the leader node, `COMMITTING` pulses the four validator nodes,
-`REVEALING` draws the connecting lines, `ACCEPTED` triggers the consensus
-burst. There is no fabricated timer standing in for consensus, and no
-invented per-validator reasoning text: the GenLayer client API doesn't
-expose individual validator votes, so `ValidatorCards` shows the one real
-thing that exists — the stored generation record — rather than inventing
-five different opinions.
+animates its 5-node pentagon directly off these values. There is no
+fabricated timer standing in for consensus, and no invented per-validator
+reasoning text: the GenLayer client API doesn't expose individual
+validator votes, so `ValidatorCards` shows the two real things that exist
+— the stored generation record and the independently-verified alignment
+judgment — rather than inventing five different opinions.
 
 ## Platform corrections
 
@@ -130,19 +176,23 @@ persisting.
 
 ## Contract addresses
 
-VULCAN has been deployed twice on Bradbury as the generation prompt was
-strengthened (contracts are immutable once deployed, so a prompt change
-requires a fresh instance, not an upgrade):
+VULCAN has been deployed four times on Bradbury as the contract evolved
+(contracts are immutable once deployed, so any logic change requires a
+fresh instance, not an upgrade):
 
 - `0x135E3Fe73A0Eab53727E598459BceB22ec5BF57D` — original prompt, superseded.
 - `0xf50543E8e15f4e09E7aF9D143549F165FA86F40d` — strengthened prompt
   (idiomatic storage-declaration guidance, an explicit non-determinism-
   boundary rule, and a minimal reference example), superseded.
-- `0x19b04aa76f241db4B645fCF5d332513a6D18f5A4` — current, after the
-  independent-audit fixes below (AST-based structural validation, a
-  str-only TreeMap rule, `mark_deployed` access control).
+- `0x19b04aa76f241db4B645fCF5d332513a6D18f5A4` — after the independent-audit
+  fixes below (AST-based structural validation, a str-only TreeMap rule,
+  `mark_deployed` access control), superseded.
+- `0xEBFD0fb2431A4F114c0992E293ed05679028dd15` — current: adds the
+  independent alignment round, the `user_generations` personal index, and
+  `get_user_generations`. Live-verified end-to-end (see the consensus-flow
+  section above).
 
-All three are recorded in `contracts/addresses.json`; the frontend only
+All four are recorded in `contracts/addresses.json`; the frontend only
 ever talks to the current one via `NEXT_PUBLIC_VULCAN_CONTRACT_ADDRESS`.
 
 ## Independent audit findings and fixes

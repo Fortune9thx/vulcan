@@ -17,7 +17,7 @@ generate() calls gl.vm.run_nondet_unsafe(leader, validator) once. In direct
 mode this just runs leader() and returns its result unconditionally -- the
 structural/confidence gate in `validator` (real rejection happens as a
 consensus-level failure on live GenLayer, not inside generate() itself) is
-exercised here via direct_vm.run_validator(leader_result=...) instead.
+exercised here via direct_vm.run_validator(index=0, leader_result=...) instead.
 """
 import json
 
@@ -38,8 +38,21 @@ VALID_SOURCE = (
 VALID_PROMPT = "Build a contract that stores a single greeting string and exposes a getter."
 
 
-def _generation_payload(source=VALID_SOURCE, summary="A greeting store.", confidence="0.85"):
-    return {"source": source, "summary": summary, "confidence": confidence}
+def _generation_payload(
+    source=VALID_SOURCE, summary="A greeting store.", confidence="0.85", alignment=None, reason=None
+):
+    payload = {"source": source, "summary": summary, "confidence": confidence}
+    # alignment_fn's own exec_prompt call shares the same ".*" mock as the
+    # leader's, so whatever alignment/reason keys are present here are what
+    # the second consensus round's leader_fn actually observes too --
+    # these tests set them explicitly to exercise parse_alignment's real
+    # branches through the genuine contract execution path, not a
+    # simulated/guessed one.
+    if alignment is not None:
+        payload["alignment"] = alignment
+    if reason is not None:
+        payload["reason"] = reason
+    return payload
 
 
 @pytest.fixture
@@ -117,67 +130,67 @@ class TestValidatorStructuralGate:
     def test_valid_payload_passes(self, contract, direct_vm):
         _mock_leader(direct_vm, _generation_payload(confidence="0.85"))
         contract.generate(VALID_PROMPT)
-        assert direct_vm.run_validator() is True
+        assert direct_vm.run_validator(index=0) is True
 
     def test_low_confidence_rejected(self, contract, direct_vm):
         _mock_leader(direct_vm, _generation_payload(confidence="0.4"))
         contract.generate(VALID_PROMPT)
-        assert direct_vm.run_validator() is False
+        assert direct_vm.run_validator(index=0) is False
 
     def test_confidence_exactly_at_threshold_passes(self, contract, direct_vm):
         _mock_leader(direct_vm, _generation_payload(confidence="0.55"))
         contract.generate(VALID_PROMPT)
-        assert direct_vm.run_validator() is True
+        assert direct_vm.run_validator(index=0) is True
 
     def test_non_numeric_confidence_rejected(self, contract, direct_vm):
         _mock_leader(direct_vm, _generation_payload(confidence="very confident"))
         contract.generate(VALID_PROMPT)
-        assert direct_vm.run_validator() is False
+        assert direct_vm.run_validator(index=0) is False
 
     def test_missing_required_fragment_rejected(self, contract, direct_vm):
         broken_source = VALID_SOURCE.replace("from genlayer import *\n", "")
         _mock_leader(direct_vm, _generation_payload(source=broken_source))
         contract.generate(VALID_PROMPT)
-        assert direct_vm.run_validator() is False
+        assert direct_vm.run_validator(index=0) is False
 
     def test_bare_list_type_annotation_rejected(self, contract, direct_vm):
         bad_source = VALID_SOURCE + "    items: list[str]\n"
         _mock_leader(direct_vm, _generation_payload(source=bad_source))
         contract.generate(VALID_PROMPT)
-        assert direct_vm.run_validator() is False
+        assert direct_vm.run_validator(index=0) is False
 
     def test_bare_dict_type_annotation_rejected(self, contract, direct_vm):
         bad_source = VALID_SOURCE + "    meta: dict[str, str]\n"
         _mock_leader(direct_vm, _generation_payload(source=bad_source))
         contract.generate(VALID_PROMPT)
-        assert direct_vm.run_validator() is False
+        assert direct_vm.run_validator(index=0) is False
 
     def test_empty_source_rejected(self, contract, direct_vm):
         _mock_leader(direct_vm, _generation_payload(source=""))
         contract.generate(VALID_PROMPT)
-        assert direct_vm.run_validator() is False
+        assert direct_vm.run_validator(index=0) is False
 
     def test_non_dict_leader_result_rejected(self, contract, direct_vm):
         _mock_leader(direct_vm, _generation_payload())
         contract.generate(VALID_PROMPT)
-        assert direct_vm.run_validator(leader_result="not a dict") is False
+        assert direct_vm.run_validator(index=0, leader_result="not a dict") is False
 
     def test_leader_error_rejected(self, contract, direct_vm):
         _mock_leader(direct_vm, _generation_payload())
         contract.generate(VALID_PROMPT)
-        assert direct_vm.run_validator(leader_error=Exception("leader crashed")) is False
+        assert direct_vm.run_validator(index=0, leader_error=Exception("leader crashed")) is False
 
     def test_nan_confidence_rejected(self, contract, direct_vm):
         # float("nan") < CONFIDENCE_THRESHOLD is False in Python -- this only
         # passes if is_valid_generation explicitly checks math.isfinite().
         _mock_leader(direct_vm, _generation_payload(confidence="nan"))
         contract.generate(VALID_PROMPT)
-        assert direct_vm.run_validator() is False
+        assert direct_vm.run_validator(index=0) is False
 
     def test_infinite_confidence_rejected(self, contract, direct_vm):
         _mock_leader(direct_vm, _generation_payload(confidence="inf"))
         contract.generate(VALID_PROMPT)
-        assert direct_vm.run_validator() is False
+        assert direct_vm.run_validator(index=0) is False
 
     def test_required_fragments_hidden_in_a_comment_are_rejected(self, contract, direct_vm):
         # A pure substring check would be fooled by this -- the real fragments
@@ -189,7 +202,7 @@ class TestValidatorStructuralGate:
         )
         _mock_leader(direct_vm, _generation_payload(source=fake_source))
         contract.generate(VALID_PROMPT)
-        assert direct_vm.run_validator() is False
+        assert direct_vm.run_validator(index=0) is False
 
     def test_non_str_treemap_value_type_rejected(self, contract, direct_vm):
         # TreeMap[str, u256] (or any non-str value type) deploys fine on
@@ -200,7 +213,7 @@ class TestValidatorStructuralGate:
         )
         _mock_leader(direct_vm, _generation_payload(source=bad_source))
         contract.generate(VALID_PROMPT)
-        assert direct_vm.run_validator() is False
+        assert direct_vm.run_validator(index=0) is False
 
     def test_variable_named_list_is_not_a_false_positive(self, contract, direct_vm):
         # A real class-level `x: list[str]` annotation must be rejected, but
@@ -213,12 +226,12 @@ class TestValidatorStructuralGate:
         )
         _mock_leader(direct_vm, _generation_payload(source=source_with_list_named_var))
         contract.generate(VALID_PROMPT)
-        assert direct_vm.run_validator() is True
+        assert direct_vm.run_validator(index=0) is True
 
     def test_syntactically_invalid_source_rejected(self, contract, direct_vm):
         _mock_leader(direct_vm, _generation_payload(source="def broken(:\n    pass"))
         contract.generate(VALID_PROMPT)
-        assert direct_vm.run_validator() is False
+        assert direct_vm.run_validator(index=0) is False
 
     def test_class_without_public_method_rejected(self, contract, direct_vm):
         no_public_method = (
@@ -231,7 +244,7 @@ class TestValidatorStructuralGate:
         )
         _mock_leader(direct_vm, _generation_payload(source=no_public_method))
         contract.generate(VALID_PROMPT)
-        assert direct_vm.run_validator() is False
+        assert direct_vm.run_validator(index=0) is False
 
 
 class TestUnreachableConsensus:
@@ -292,3 +305,80 @@ class TestMarkDeployed:
             contract.mark_deployed(generation_id, "not-an-address")
 
         assert contract.get_deployed(generation_id) == ""
+
+
+class TestUserGenerationsIndex:
+    def test_starts_empty_for_unknown_user(self, contract, direct_vm):
+        assert contract.get_user_generations("0x1234567890123456789012345678901234567890") == "[]"
+
+    def test_records_generation_id_for_sender(self, contract, direct_vm):
+        _mock_leader(direct_vm, _generation_payload())
+        generation_id = contract.generate(VALID_PROMPT)
+        sender = json.loads(contract.get_generation(generation_id))["sender"]
+
+        ids = json.loads(contract.get_user_generations(sender))
+        assert ids == [generation_id]
+
+    def test_accumulates_across_multiple_generations_from_same_sender(self, contract, direct_vm):
+        _mock_leader(direct_vm, _generation_payload())
+        first_id = contract.generate(VALID_PROMPT)
+        second_id = contract.generate(VALID_PROMPT)
+        sender = json.loads(contract.get_generation(first_id))["sender"]
+
+        ids = json.loads(contract.get_user_generations(sender))
+        assert ids == [first_id, second_id]
+
+
+class TestAlignmentSecondConsensusRound:
+    """The second consensus round (gl.eq_principle.prompt_non_comparative,
+    called from generate() after the code-gen round completes) shares the
+    same ".*" gl.nondet.exec_prompt mock as the leader's own call --
+    alignment_fn's inner exec_prompt call sees the exact same payload, so
+    setting alignment/reason on _generation_payload exercises the real
+    parse_alignment code path through the genuine contract execution,
+    not a simulated one. This also proves the two nondet rounds compose
+    correctly in one write method without crashing."""
+
+    def test_valid_yes_alignment_is_stored_as_is(self, contract, direct_vm):
+        _mock_leader(direct_vm, _generation_payload(alignment="yes", reason="Clearly does what was asked."))
+        generation_id = contract.generate(VALID_PROMPT)
+        stored = json.loads(contract.get_generation(generation_id))
+
+        assert stored["alignment"] == "yes"
+        assert stored["alignment_reason"] == "Clearly does what was asked."
+
+    def test_valid_partial_alignment_is_stored_as_is(self, contract, direct_vm):
+        _mock_leader(direct_vm, _generation_payload(alignment="partial", reason="Missing an edge case."))
+        generation_id = contract.generate(VALID_PROMPT)
+        stored = json.loads(contract.get_generation(generation_id))
+
+        assert stored["alignment"] == "partial"
+        assert stored["alignment_reason"] == "Missing an edge case."
+
+    def test_invalid_alignment_value_defaults_to_no(self, contract, direct_vm):
+        _mock_leader(direct_vm, _generation_payload(alignment="maybe", reason="Uncertain."))
+        generation_id = contract.generate(VALID_PROMPT)
+        stored = json.loads(contract.get_generation(generation_id))
+
+        assert stored["alignment"] == "no"
+        assert stored["alignment_reason"] == "Uncertain."
+
+    def test_missing_alignment_fields_default_safely(self, contract, direct_vm):
+        # No alignment/reason keys in the mocked payload at all.
+        _mock_leader(direct_vm, _generation_payload())
+        generation_id = contract.generate(VALID_PROMPT)
+        stored = json.loads(contract.get_generation(generation_id))
+
+        assert stored["alignment"] == "no"
+        assert stored["alignment_reason"] == "No reasoning was provided."
+
+    def test_generation_still_succeeds_even_if_alignment_round_is_degenerate(self, contract, direct_vm):
+        # The alignment round is enrichment, not a hard gate -- a
+        # low-information response from it must never discard an
+        # already-consensus-approved source.
+        _mock_leader(direct_vm, _generation_payload(alignment="garbage-value"))
+        generation_id = contract.generate(VALID_PROMPT)
+        stored = json.loads(contract.get_generation(generation_id))
+
+        assert stored["source"] == VALID_SOURCE
+        assert stored["alignment"] == "no"

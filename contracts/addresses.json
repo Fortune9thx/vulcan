@@ -1,6 +1,7 @@
 {
   "bradbury": {
-    "vulcan": "0x19b04aa76f241db4B645fCF5d332513a6D18f5A4",
+    "vulcan": "0xEBFD0fb2431A4F114c0992E293ed05679028dd15",
+    "vulcan_v3_audit_fixes": "0x19b04aa76f241db4B645fCF5d332513a6D18f5A4",
     "vulcan_v2_strengthened_prompt": "0xf50543E8e15f4e09E7aF9D143549F165FA86F40d",
     "vulcan_v1_original_prompt": "0x135E3Fe73A0Eab53727E598459BceB22ec5BF57D"
   }

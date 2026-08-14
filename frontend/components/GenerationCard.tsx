@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { CircleCheck } from "lucide-react";
+import { AlignmentBadge } from "@/components/AlignmentBadge";
 import type { DashboardEntry } from "@/lib/dashboard-data";
 import { CONFIDENCE_THRESHOLD } from "@/lib/vulcan-abi";
 import { cn, truncateAddress } from "@/lib/utils";
@@ -35,6 +36,8 @@ export function GenerationCard({
       </div>
 
       <p className="line-clamp-1 text-xs text-text-muted">{entry.summary || "No summary."}</p>
+
+      <AlignmentBadge alignment={entry.alignment} className="self-start" />
 
       <div className="mt-auto flex items-center justify-between gap-2 font-mono text-[10px] text-text-muted">
         <span className="rounded-full bg-white/[0.03] px-2 py-0.5">#{entry.id}</span>

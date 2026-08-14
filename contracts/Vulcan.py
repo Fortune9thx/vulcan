@@ -16,6 +16,7 @@ PINNED_DEPENDENCY = "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jp
 # lookalike that corrupted it, so it's written out in full here.
 REQUIRED_HEADER_PREFIX = '# { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }'
 CONFIDENCE_THRESHOLD = 0.55
+VALID_ALIGNMENTS = ("yes", "partial", "no")
 
 
 def _decorator_dotted_name(node) -> str:
@@ -58,10 +59,13 @@ def _annotation_is_illegal_storage_type(annotation) -> bool:
 
 
 def is_valid_generation(data) -> bool:
-    # Structural/confidence gate, kept free of any gl.* calls so it can be
-    # unit-tested directly -- gltest's WASI mock only ever runs
-    # run_nondet_unsafe's leader function, never its validator function, so
-    # this logic is otherwise unreachable from a direct-mode test suite.
+    # Structural/confidence gate for the FIRST consensus round (code
+    # generation), kept free of any gl.* calls so it can be unit-tested
+    # directly -- gltest's WASI mock only ever runs run_nondet_unsafe's
+    # leader function, never its validator function, so this logic is
+    # otherwise unreachable from a direct-mode test suite. The alignment
+    # judgment (second round) is verified by a different mechanism --
+    # see parse_alignment and generate() below.
     if not isinstance(data, dict):
         return False
     source = data.get("source", "")
@@ -115,11 +119,46 @@ def is_valid_generation(data) -> bool:
     return True
 
 
+def parse_alignment(raw) -> dict:
+    # Defensive parsing of the second consensus round's output. This is
+    # transparency/enrichment data surfaced alongside an already-consensus
+    # -approved generation, not a hard gate on generate() itself -- the
+    # source has already cleared is_valid_generation by the time this
+    # runs, so a malformed or unparseable alignment result degrades to a
+    # pessimistic, clearly-labeled default rather than discarding an
+    # already-agreed generation. Kept free of gl.* calls for direct testing.
+    fallback = {"alignment": "no", "alignment_reason": "Alignment judgment could not be determined."}
+    if not isinstance(raw, str):
+        return fallback
+    try:
+        data = json.loads(raw)
+    except (TypeError, ValueError):
+        return fallback
+    if not isinstance(data, dict):
+        return fallback
+
+    alignment = data.get("alignment", "no")
+    if alignment not in VALID_ALIGNMENTS:
+        alignment = "no"
+
+    reason = data.get("reason", data.get("alignment_reason", ""))
+    if not isinstance(reason, str) or len(reason) == 0:
+        reason = "No reasoning was provided."
+
+    return {"alignment": alignment, "alignment_reason": reason}
+
+
 class Vulcan(gl.Contract):
     # Only TreeMap[str, str] is reliable on Bradbury -- non-str value types
     # (Address, u256, dataclass, bool) deploy but become permanently unreadable.
     generations: TreeMap[str, str]
     deployed: TreeMap[str, str]
+    # value = JSON array of generation_id strings, e.g. '["0", "3", "7"]'.
+    # Grows with each of a user's generations, so a prolific user's Nth
+    # generation costs O(n) to re-serialize -- a real scaling cost, not a
+    # correctness issue, and cheap relative to the LLM consensus rounds
+    # this method already runs.
+    user_generations: TreeMap[str, str]
     generation_count: u256
 
     def __init__(self):
@@ -136,6 +175,10 @@ class Vulcan(gl.Contract):
     @gl.public.view
     def get_count(self) -> u256:
         return self.generation_count
+
+    @gl.public.view
+    def get_user_generations(self, user: str) -> str:
+        return self.user_generations.get(user, "[]")
 
     @gl.public.write
     def generate(self, prompt: str) -> str:
@@ -240,16 +283,78 @@ class Vulcan(gl.Contract):
                 "response may have been malformed. Try rephrasing your prompt."
             )
 
+        source = str(result.get("source", ""))
+        summary = str(result.get("summary", ""))
+        confidence = str(result.get("confidence", "0"))
+
+        # Second, independent consensus round: judges whether the
+        # already-agreed source reasonably attempts the user's request.
+        # Uses gl.eq_principle.prompt_non_comparative -- the platform's own
+        # equivalence primitive -- rather than a hand-rolled second
+        # exec_prompt call compared in plain Python, which is known to hit
+        # a live DETERMINISTIC_VIOLATION on Bradbury's consensus protocol.
+        # Every validator calls alignment_fn independently (a fresh LLM
+        # call each time); the platform's own equivalence check, not this
+        # contract's code, decides whether their judgments agree per the
+        # criteria below.
+        def alignment_fn() -> str:
+            alignment_prompt = (
+                "You are judging whether a generated GenLayer Intelligent Contract "
+                "reasonably attempts to fulfill a user's request. This is NOT a full "
+                "code review -- do not judge style, security, or subtle bugs. Only "
+                "judge whether the contract's storage and methods plausibly address "
+                "what was asked.\n\n"
+                "Output ONLY a JSON object with these exact keys:\n"
+                "{\n"
+                '  "alignment": "yes" | "partial" | "no",\n'
+                '  "reason": "one short sentence explaining the judgment"\n'
+                "}\n\n"
+                "User request:\n" + prompt + "\n\n"
+                "Generated source:\n" + source
+            )
+            judged = gl.nondet.exec_prompt(alignment_prompt, response_format="json")
+            if not isinstance(judged, dict):
+                judged = {}
+            return json.dumps(
+                {
+                    "alignment": str(judged.get("alignment", "no")),
+                    "reason": str(judged.get("reason", "")),
+                }
+            )
+
+        alignment_raw = gl.eq_principle.prompt_non_comparative(
+            alignment_fn,
+            task="Judge whether a generated GenLayer contract reasonably attempts to "
+            "fulfill the user's request",
+            criteria="Agree only if the alignment classification (yes/partial/no) "
+            "matches across independent judgments; differences in the exact wording "
+            "of the reason are fine",
+        )
+        alignment = parse_alignment(alignment_raw)
+
+        sender_str = str(gl.message.sender_address)
         record = {
             "prompt": prompt,
-            "source": result.get("source", ""),
-            "summary": result.get("summary", ""),
-            # Consensus already confirmed this parses as a finite float string.
-            "confidence": str(result.get("confidence", "0")),
-            "sender": str(gl.message.sender_address),
+            "source": source,
+            "summary": summary,
+            "confidence": confidence,
+            "alignment": alignment["alignment"],
+            "alignment_reason": alignment["alignment_reason"],
+            "sender": sender_str,
         }
         self.generations[generation_id] = json.dumps(record)
         self.generation_count += u256(1)
+
+        existing_ids_raw = self.user_generations.get(sender_str, "[]")
+        try:
+            ids = json.loads(existing_ids_raw)
+            if not isinstance(ids, list):
+                ids = []
+        except (TypeError, ValueError):
+            ids = []
+        ids.append(generation_id)
+        self.user_generations[sender_str] = json.dumps(ids)
+
         return generation_id
 
     @gl.public.write

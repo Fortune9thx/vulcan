@@ -16,7 +16,8 @@ export function DashboardStats({
 }) {
   const tiles = [
     { label: "Total generations", value: stats.totalGenerations.toString() },
-    { label: "My generations", value: stats.myCount.toString(), hint: `of ${stats.loadedCount} loaded` },
+    // Exact -- backed by Vulcan.user_generations, not a scan of loaded batches.
+    { label: "My generations", value: stats.myCount.toString() },
     { label: "Deployed", value: stats.deployedCount.toString(), hint: `of ${stats.loadedCount} loaded` },
     {
       label: "My avg. confidence",
