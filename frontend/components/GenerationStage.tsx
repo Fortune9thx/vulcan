@@ -167,7 +167,11 @@ export function GenerationStage({
         <CodeViewer code={record!.source} className="glass-panel" />
       </div>
 
-      <ResultSummaryStrip confidence={record!.confidence} alignment={record!.alignment} />
+      <ResultSummaryStrip
+        confidence={record!.confidence}
+        alignment={record!.alignment}
+        alignmentReason={record!.alignmentReason}
+      />
 
       <ValidatorCards
         summary={record!.summary}

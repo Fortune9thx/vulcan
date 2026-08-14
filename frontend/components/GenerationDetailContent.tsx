@@ -69,7 +69,7 @@ export function GenerationDetailContent({
               <span className={`text-xs font-medium ${passed ? "text-amber-500" : "text-danger"}`}>
                 confidence {entry.confidence}
               </span>
-              <AlignmentBadge alignment={entry.alignment} />
+              <AlignmentBadge alignment={entry.alignment} alignmentReason={entry.alignmentReason} />
             </div>
             <p className="mt-2 text-xs text-text-muted">{entry.alignmentReason}</p>
           </div>
@@ -81,7 +81,11 @@ export function GenerationDetailContent({
         </div>
       </div>
 
-      <ResultSummaryStrip confidence={entry.confidence} alignment={entry.alignment} />
+      <ResultSummaryStrip
+        confidence={entry.confidence}
+        alignment={entry.alignment}
+        alignmentReason={entry.alignmentReason}
+      />
 
       <div className="glass-panel rounded-xl p-5">
         {alreadyDeployed || (state === "done" && deployedAddress) ? (

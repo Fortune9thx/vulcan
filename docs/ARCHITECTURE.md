@@ -95,6 +95,24 @@ the original request:
   is why `GenerationStage.tsx` still surfaces `LEADER_TIMEOUT` with an
   honest, specific "the leader timed out producing a result, try again"
   message rather than hiding it.
+- **"Not aligned" and "the alignment round didn't complete" used to look
+  identical.** `parse_alignment`'s fallback (raw isn't parseable JSON --
+  the same kind of validator disagreement/timeout that can hit either
+  consensus round) defaults `alignment` to `"no"`, same as a genuine
+  negative judgment. Caught live: a real generation with 0.95 confidence
+  and a well-formed, clearly on-topic contract landed on that fallback,
+  which read in the UI as "the model judged this a poor match" when what
+  actually happened was "this specific round never produced a usable
+  result." The two mean very different things and shouldn't share a
+  visual treatment. `lib/vulcan-abi.ts`'s `isInconclusiveAlignment()`
+  detects the fallback by its exact stored reason text and every
+  alignment display (`AlignmentBadge`, `ResultSummaryStrip`,
+  `ValidatorCards`) now renders it as a distinct neutral "Alignment
+  inconclusive" state instead of the red "Not aligned" one. Purely a
+  frontend distinction -- the contract's stored value is unchanged, since
+  redeploying to add a fourth on-chain state wasn't worth it for what's
+  ultimately still an honest defensive fallback, just one that needed
+  clearer framing.
 
 Both rounds' results are stored together in `generations: TreeMap[str, str]`
 as one JSON record, and the sender's `generation_id` is appended to

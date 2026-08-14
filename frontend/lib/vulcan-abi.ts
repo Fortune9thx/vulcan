@@ -67,6 +67,21 @@ export function parseGenerationIdList(raw: string): string[] {
 
 export const CONFIDENCE_THRESHOLD = 0.55;
 
+// The exact fallback text contracts/Vulcan.py's parse_alignment() stores
+// when the alignment consensus round didn't produce a usable result (a
+// validator disagreement/timeout in that round, not a judgment that the
+// code fails to match the request) -- alignment defaults to "no" in this
+// case, same as a genuine negative judgment, but the two mean very
+// different things: "we checked and it doesn't match" vs. "the check
+// itself didn't complete." Confirmed live: a real generation with 0.95
+// confidence and an on-topic, well-formed contract still landed here,
+// which would read as a real rejection without this distinction.
+const INCONCLUSIVE_ALIGNMENT_REASON = "Alignment judgment could not be determined.";
+
+export function isInconclusiveAlignment(alignment: Alignment, alignmentReason: string): boolean {
+  return alignment === "no" && alignmentReason === INCONCLUSIVE_ALIGNMENT_REASON;
+}
+
 export function getVulcanAddress(): `0x${string}` {
   const address = process.env.NEXT_PUBLIC_VULCAN_CONTRACT_ADDRESS;
   if (!address) {

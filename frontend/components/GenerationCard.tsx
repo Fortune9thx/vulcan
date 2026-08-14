@@ -37,7 +37,7 @@ export function GenerationCard({
 
       <p className="line-clamp-1 text-xs text-text-muted">{entry.summary || "No summary."}</p>
 
-      <AlignmentBadge alignment={entry.alignment} className="self-start" />
+      <AlignmentBadge alignment={entry.alignment} alignmentReason={entry.alignmentReason} className="self-start" />
 
       <div className="mt-auto flex items-center justify-between gap-2 font-mono text-[10px] text-text-muted">
         <span className="rounded-full bg-black/[0.04] px-2 py-0.5">#{entry.id}</span>

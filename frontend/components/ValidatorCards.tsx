@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDown, Crown, ShieldCheck, Sparkle } from "lucide-react";
 import { AlignmentBadge } from "@/components/AlignmentBadge";
 import { cn } from "@/lib/utils";
-import { CONFIDENCE_THRESHOLD, type Alignment } from "@/lib/vulcan-abi";
+import { CONFIDENCE_THRESHOLD, isInconclusiveAlignment, type Alignment } from "@/lib/vulcan-abi";
 
 const STRUCTURAL_CHECKS = [
   "Required imports and pinned runner header present",
@@ -27,6 +27,7 @@ export function ValidatorCards({
 }) {
   const confidenceValue = Number.parseFloat(confidence);
   const passed = Number.isFinite(confidenceValue) && confidenceValue >= CONFIDENCE_THRESHOLD;
+  const inconclusive = isInconclusiveAlignment(alignment, alignmentReason);
 
   return (
     <div className="flex flex-col gap-2">
@@ -46,8 +47,16 @@ export function ValidatorCards({
         icon={<Sparkle size={15} className="text-amber-400" />}
         title="Alignment judgment"
         subtitle={alignmentReason || "No reasoning was provided."}
-        badge={alignment === "yes" ? "Aligned" : alignment === "partial" ? "Partial" : "Not aligned"}
-        badgeTone={alignment === "no" ? "danger" : "amber"}
+        badge={
+          inconclusive
+            ? "Inconclusive"
+            : alignment === "yes"
+              ? "Aligned"
+              : alignment === "partial"
+                ? "Partial"
+                : "Not aligned"
+        }
+        badgeTone={inconclusive ? "neutral" : alignment === "no" ? "danger" : "amber"}
         defaultOpen
       >
         <p className="mb-2 text-xs text-text-muted">
@@ -55,9 +64,13 @@ export function ValidatorCards({
           this source reasonably attempts the request — a real check, distinct from the structural gate
           below, but still a self-reported judgment surfaced transparently, not a guarantee the code is
           bug-free.
+          {inconclusive &&
+            " This particular round didn't produce a usable result (the same kind of validator " +
+              "timeout/disagreement that can affect any consensus round) rather than judging the code a " +
+              "poor match -- the two default to the same stored value, but mean different things."}
         </p>
         <div className="flex items-center gap-2">
-          <AlignmentBadge alignment={alignment} />
+          <AlignmentBadge alignment={alignment} alignmentReason={alignmentReason} />
         </div>
         <p className="mt-2 text-sm text-text-secondary">{alignmentReason}</p>
       </Card>
@@ -127,7 +140,7 @@ function Card({
   title: string;
   subtitle: string;
   badge: string;
-  badgeTone: "amber" | "danger";
+  badgeTone: "amber" | "danger" | "neutral";
   defaultOpen?: boolean;
   children: React.ReactNode;
 }) {
@@ -149,8 +162,12 @@ function Card({
         <div className="flex shrink-0 items-center gap-2">
           <span
             className={cn(
-              "rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide",
-              badgeTone === "amber" ? "bg-amber-400/10 text-amber-400" : "bg-danger/10 text-danger"
+              "rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide",
+              badgeTone === "amber"
+                ? "bg-amber-400/10 text-amber-500"
+                : badgeTone === "neutral"
+                  ? "bg-black/[0.04] text-text-secondary"
+                  : "bg-danger/10 text-danger"
             )}
           >
             {badge}
