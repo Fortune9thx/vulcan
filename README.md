@@ -2,10 +2,14 @@
 
 **Describe it. Forge it. Deploy it under consensus.**
 
+**Live:** [vulcan-x9.vercel.app](https://vulcan-x9.vercel.app) · **Contract:**
+[`0xA7bE484beE1Ee5A83ffDFa370f2803F52605369F`](https://explorer-bradbury.genlayer.com/address/0xA7bE484beE1Ee5A83ffDFa370f2803F52605369F)
+on GenLayer Bradbury
+
 VULCAN is a GenLayer Intelligent Contract that generates other Intelligent
 Contracts from a natural-language description — under real multi-validator
-LLM consensus, not a single off-chain model call. A cinematic Next.js
-frontend drives and visualizes the full transaction lifecycle, from
+LLM consensus, not a single off-chain model call. A polished, editorial
+Next.js frontend drives and visualizes the full transaction lifecycle, from
 submission through consensus to a real on-chain deployment.
 
 ## The problem
@@ -45,9 +49,11 @@ attempts what was asked — and only an agreed-upon result is ever stored.
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full two-round
 consensus design (including platform corrections made after checking the
-original design against previously live-tested GenLayer behavior, and an
-independent audit that found and fixed 13 real bugs before this) and
-[`docs/HOW_TO_USE.md`](docs/HOW_TO_USE.md) to run it yourself.
+original design against previously live-tested GenLayer behavior, an
+independent audit that found and fixed 13 real bugs, a full security audit,
+and a round of fixes found through actually using the live deployment —
+not just testing) and [`docs/HOW_TO_USE.md`](docs/HOW_TO_USE.md) to run it
+yourself.
 
 ## Structure
 
@@ -55,9 +61,10 @@ independent audit that found and fixed 13 real bugs before this) and
 contracts/       Vulcan.py -- the Intelligent Contract
 tests/direct/     gltest direct-mode unit tests (network-independent)
 tests/integration/ Real-network end-to-end tests
-frontend/         Next.js 15 app -- the cinematic forge UI
+frontend/         Next.js 15 app -- the editorial forge UI
 scripts/          deploy.mjs / seed.mjs
 docs/             ARCHITECTURE, SUBMISSION, HOW_TO_USE
+.github/workflows/ CI: contract lint+test, frontend lint+build
 ```
 
 ## Stack

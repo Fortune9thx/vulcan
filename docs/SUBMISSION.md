@@ -1,5 +1,11 @@
 # VULCAN — Portal Submission Notes
 
+**Live:** [vulcan-x9.vercel.app](https://vulcan-x9.vercel.app) · **Repo:**
+[github.com/Fortune9thx/vulcan](https://github.com/Fortune9thx/vulcan) ·
+**Contract:**
+[`0xA7bE484beE1Ee5A83ffDFa370f2803F52605369F`](https://explorer-bradbury.genlayer.com/address/0xA7bE484beE1Ee5A83ffDFa370f2803F52605369F)
+on GenLayer Bradbury
+
 ## The trust problem
 
 Anyone can ask an LLM to write a smart contract. Nobody can trust the
@@ -50,6 +56,10 @@ only an agreed-upon result is ever stored.
   can never be marked deployed even if a caller bypasses the frontend.
 - **genvm-lint clean.** `genvm-lint check contracts/Vulcan.py` passes with
   0 findings.
+- **CI enforces all of the above on every push.**
+  `.github/workflows/ci.yml` runs `genvm-lint` + the direct-mode test
+  suite on the contract, and lint + a real type-check
+  (`tsc --noEmit`, not just `next build`'s looser check) on the frontend.
 - **Two independent non-deterministic mechanisms, composed correctly in one
   write method.** `generate()` runs `gl.vm.run_nondet_unsafe` (code
   generation) followed by `gl.eq_principle.prompt_non_comparative`
@@ -57,18 +67,24 @@ only an agreed-upon result is ever stored.
   API each is actually built for. Verified mechanically in `gltest`'s
   direct mode and confirmed live on Bradbury (both rounds completed,
   `ACCEPTED`/`AGREE`/`FINISHED_WITH_RETURN`).
-- **Direct-mode + integration tests.** `tests/direct/test_vulcan.py` — 40
+- **Direct-mode + integration tests.** `tests/direct/test_vulcan.py` — 46
   passing tests covering the happy path, prompt-length validation, the
   validator's structural gate (via `direct_vm.run_validator`, the real
   API for exercising `run_nondet_unsafe`'s captured validator in gltest's
   WASI mock — including adversarial cases: fragments hidden in a comment,
-  NaN/Infinity confidence, non-`str` TreeMap values, syntactically invalid
-  source, a class with no public method), `mark_deployed`'s confidence
-  gating/sender check/already-deployed guard, the `user_generations`
-  personal index, and the alignment round's parsing/defaulting logic
-  (valid classifications, invalid values, missing fields).
-  `tests/integration/test_vulcan_e2e.py` exercises the same flows against
-  a live network.
+  NaN/Infinity confidence, non-`str` TreeMap values, bare/`typing.List`/
+  `typing.Dict` storage annotations, syntactically invalid source, a class
+  with no public method), `mark_deployed`'s confidence gating/sender
+  check/already-deployed guard, the `user_generations` personal index, and
+  the alignment round's parsing/defaulting logic (valid classifications,
+  invalid values, missing fields). `tests/direct/test_vulcan_redteam.py`
+  adds an empirical, not just argued, proof of a disclosed limitation: a
+  `TipJar` contract with an unrestricted fund-drain method — structurally
+  legal, no access control at all — passes both the structural validator
+  and the alignment round with a "yes" rating, confirming in a real test
+  run (not a claim) that nothing downstream of the model catches a
+  legal-but-malicious generation. `tests/integration/test_vulcan_e2e.py`
+  exercises the same flows against a live network.
 
 ## Independent audit
 
@@ -114,6 +130,52 @@ and dependency supply chain. Full detail and evidence in
 - Added baseline security headers (`frame-ancestors`/`X-Frame-Options`,
   `nosniff`, `Referrer-Policy`) — a page whose buttons trigger real wallet
   transactions had none before this pass.
+
+## Hardened through live use, not just testing
+
+After the security audit, the deployed app was actually used — by a real
+person, with a real wallet, hitting real GenLayer network conditions —
+and every bug that surfaced was root-caused against the actual chain
+state before being called fixed, never guessed at from a screenshot:
+
+- **A live storage-bypass bug**, found by an independent adversarial
+  review agent and confirmed empirically (see `test_vulcan_redteam.py`
+  above): `is_valid_generation` only checked subscripted `list[...]`/
+  `dict[...]` storage annotations — a bare `items: list` or
+  `items: typing.List[str]` sailed through untouched, undermining the one
+  guarantee that check exists to make. Fixed and redeployed (the current
+  live address, below).
+- **A wallet-connection bug**: `useVulcanClient()` hardcoded
+  `window.ethereum` as the transaction provider, which only happens to
+  work when the connected wallet is the single injected extension a page
+  sees — silently broken for WalletConnect, Coinbase Smart Wallet, Safe,
+  or a second installed extension, even though wagmi's own connection
+  state correctly showed "connected." Fixed to ask the actual connector
+  for its real provider instead of guessing at a global.
+- **A real `LEADER_TIMEOUT`**, hit live and traced to a specific, verified
+  cause (every GenLayer chain defaults leader retry attempts to 3;
+  `generate()`'s two sequential LLM rounds give one slow attempt more
+  surface to exhaust that budget than a typical write) rather than
+  shrugged off as "the network is sometimes slow" — `generateContract()`
+  now explicitly requests 5 attempts for this specific call.
+- **The core forge flow itself was stuck** for every user until this was
+  found: the frontend polled for `FINALIZED` before showing the result,
+  but `FINALIZED` settles GenLayer's appeal window and can take several
+  minutes past `ACCEPTED` on Bradbury — while the generation's record is
+  already fully readable the moment consensus is `ACCEPTED`. Verified
+  directly (submitted a real `generate()` call, confirmed the record was
+  readable via the same client the frontend uses, well before
+  `FINALIZED`) before fixing the poll to stop at the right signal.
+- **A misleading "Not aligned" state**: the alignment round's defensive
+  fallback (used when that round's result isn't parseable — the same
+  kind of validator disagreement/timeout any round can hit) and a
+  genuine negative judgment both stored `alignment: "no"` and looked
+  identical in the UI. A real generation with 0.95 confidence and clearly
+  on-topic code displayed as rejected for a reason that had nothing to do
+  with what it generated. Now visually distinguished as "Alignment
+  inconclusive" instead of conflated with a real rejection.
+
+Full root-cause detail and evidence for each: `docs/ARCHITECTURE.md`.
 
 ## Second consensus round: independent alignment verification
 
