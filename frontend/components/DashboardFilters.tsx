@@ -35,15 +35,15 @@ export function DashboardFilters({
 }) {
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-center gap-1 rounded-full border border-white/5 bg-white/[0.02] p-1">
+      <div className="flex items-center gap-1 rounded-full border border-border bg-void-raised p-1">
         {TABS.map(({ value, label }) => (
           <button
             key={value}
             onClick={() => onTabChange(value)}
             disabled={tabsDisabled && value === "mine"}
             className={cn(
-              "rounded-full px-3.5 py-1.5 font-mono text-xs transition-colors disabled:opacity-40",
-              tab === value ? "bg-amber-400/10 text-amber-400" : "text-text-secondary hover:text-text-primary"
+              "rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors disabled:opacity-40",
+              tab === value ? "bg-text-primary text-void-raised" : "text-text-secondary hover:text-text-primary"
             )}
           >
             {label}
@@ -58,14 +58,14 @@ export function DashboardFilters({
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Search prompts & summaries…"
-            className="w-48 rounded-full border border-white/5 bg-white/[0.02] py-1.5 pl-8 pr-3 font-mono text-xs text-text-primary placeholder:text-text-muted focus:border-amber-400/30 focus:outline-none sm:w-64"
+            className="w-48 rounded-full border border-border bg-void-raised py-1.5 pl-8 pr-3 text-xs text-text-primary placeholder:text-text-muted focus:border-amber-400/50 focus:outline-none sm:w-64"
           />
         </div>
 
         <select
           value={sort}
           onChange={(e) => onSortChange(e.target.value as DashboardSort)}
-          className="rounded-full border border-white/5 bg-white/[0.02] px-3 py-1.5 font-mono text-xs text-text-secondary focus:border-amber-400/30 focus:outline-none"
+          className="rounded-full border border-border bg-void-raised px-3 py-1.5 text-xs text-text-secondary focus:border-amber-400/50 focus:outline-none"
         >
           {SORTS.map(({ value, label }) => (
             <option key={value} value={value} className="bg-void-raised">

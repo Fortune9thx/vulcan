@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Instrument_Serif, Archivo, JetBrains_Mono } from "next/font/google";
+import { Instrument_Serif, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/Providers";
 
@@ -10,7 +10,7 @@ const instrumentSerif = Instrument_Serif({
   style: ["normal", "italic"],
 });
 
-const archivo = Archivo({
+const inter = Inter({
   variable: "--font-body",
   subsets: ["latin"],
 });
@@ -36,7 +36,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${instrumentSerif.variable} ${archivo.variable} ${jetBrainsMono.variable} h-full antialiased`}
+      className={`${instrumentSerif.variable} ${inter.variable} ${jetBrainsMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-void text-text-primary">
         <Providers>{children}</Providers>

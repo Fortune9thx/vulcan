@@ -36,7 +36,7 @@ export function GenerationDetail({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm" />
-        <Dialog.Content className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col overflow-y-auto border-l border-white/10 bg-void-raised p-6 shadow-2xl focus:outline-none sm:p-8">
+        <Dialog.Content className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col overflow-y-auto border-l border-border bg-void-raised p-6 shadow-xl focus:outline-none sm:p-8">
           <div className="flex items-start justify-between gap-4">
             <div>
               <Dialog.Title className="font-serif text-2xl italic text-text-primary">
@@ -50,12 +50,12 @@ export function GenerationDetail({
               <button
                 onClick={handleShare}
                 title="Copy public share link"
-                className="rounded-md p-1.5 text-text-muted transition-colors hover:bg-white/5 hover:text-text-primary"
+                className="rounded-md p-1.5 text-text-muted transition-colors hover:bg-black/5 hover:text-text-primary"
               >
                 {shared ? <Check size={16} /> : <Share2 size={16} />}
               </button>
               <Dialog.Close asChild>
-                <button className="rounded-md p-1.5 text-text-muted transition-colors hover:bg-white/5 hover:text-text-primary">
+                <button className="rounded-md p-1.5 text-text-muted transition-colors hover:bg-black/5 hover:text-text-primary">
                   <X size={18} />
                 </button>
               </Dialog.Close>

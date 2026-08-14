@@ -12,10 +12,14 @@ interface Particle {
   radius: number;
 }
 
+// Deliberately restrained -- "very subtle geometric ambient, prefer clean
+// over noisy" per the editorial redesign direction. A dense, bright
+// particle field reads as crypto-neon; a handful of quiet, slow-moving
+// points is closer to the calm-power mood this system is going for.
 const STATE_CONFIG: Record<ParticleFieldState, { count: number; speed: number; linkDistance: number; opacity: number }> = {
-  idle: { count: 60, speed: 0.08, linkDistance: 90, opacity: 0.35 },
-  active: { count: 90, speed: 0.22, linkDistance: 130, opacity: 0.55 },
-  consensus: { count: 110, speed: 0.35, linkDistance: 170, opacity: 0.85 },
+  idle: { count: 18, speed: 0.04, linkDistance: 110, opacity: 0.12 },
+  active: { count: 24, speed: 0.07, linkDistance: 130, opacity: 0.16 },
+  consensus: { count: 28, speed: 0.1, linkDistance: 150, opacity: 0.22 },
 };
 
 export function ParticleField({ state = "idle" }: { state?: ParticleFieldState }) {
@@ -73,7 +77,7 @@ export function ParticleField({ state = "idle" }: { state?: ParticleFieldState }
 
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(245, 158, 11, ${config.opacity})`;
+        ctx.fillStyle = `rgba(23, 23, 28, ${config.opacity})`;
         ctx.fill();
       }
 
@@ -89,7 +93,7 @@ export function ParticleField({ state = "idle" }: { state?: ParticleFieldState }
             ctx.beginPath();
             ctx.moveTo(a.x, a.y);
             ctx.lineTo(b.x, b.y);
-            ctx.strokeStyle = `rgba(245, 158, 11, ${lineOpacity})`;
+            ctx.strokeStyle = `rgba(23, 23, 28, ${lineOpacity})`;
             ctx.lineWidth = 0.6;
             ctx.stroke();
           }

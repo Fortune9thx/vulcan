@@ -102,7 +102,7 @@ function ConfidenceMeter({ value }: { value: number }) {
         <span>Confidence</span>
         <span>{Number.isFinite(value) ? `${pct.toFixed(0)}%` : "—"}</span>
       </div>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/5">
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-black/[0.06]">
         <motion.div
           className="h-full rounded-full bg-gradient-to-r from-amber-600 to-amber-400"
           initial={{ width: 0 }}

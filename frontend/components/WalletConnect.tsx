@@ -19,21 +19,21 @@ export function WalletConnect() {
             {!connected ? (
               <button
                 onClick={openConnectModal}
-                className="rounded-md border border-amber-400/30 px-4 py-2 font-mono text-xs text-amber-100 transition-colors hover:border-amber-400/60 hover:bg-amber-400/5"
+                className="rounded-full bg-text-primary px-5 py-2.5 text-sm font-medium text-void-raised transition-colors hover:bg-black"
               >
                 Connect Wallet
               </button>
             ) : chain.unsupported ? (
               <button
                 onClick={openChainModal}
-                className="rounded-md border border-danger/40 px-4 py-2 font-mono text-xs text-danger"
+                className="rounded-full border border-danger/40 px-5 py-2.5 text-sm font-medium text-danger"
               >
                 Wrong network
               </button>
             ) : (
               <button
                 onClick={openAccountModal}
-                className="rounded-md border border-amber-400/20 px-4 py-2 font-mono text-xs text-text-secondary transition-colors hover:border-amber-400/50 hover:text-amber-100"
+                className="rounded-full border border-border px-5 py-2.5 text-sm font-medium text-text-primary transition-colors hover:border-text-secondary"
               >
                 {account.displayName}
               </button>

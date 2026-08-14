@@ -103,7 +103,7 @@ export function ConsensusVisualizer({
                 y1={from.y}
                 x2={to.x}
                 y2={to.y}
-                stroke={failed ? "rgba(239,68,68,0.5)" : "rgba(245,158,11,0.6)"}
+                stroke={failed ? "rgba(198,40,40,0.45)" : "rgba(212,146,42,0.6)"}
                 strokeWidth={consensusReached ? 2 : 1}
                 initial={{ pathLength: 0, opacity: 0 }}
                 animate={{
@@ -128,7 +128,7 @@ export function ConsensusVisualizer({
                   y1={from.y}
                   x2={to.x}
                   y2={to.y}
-                  stroke="rgba(245,158,11,0.35)"
+                  stroke="rgba(212,146,42,0.3)"
                   strokeWidth={1}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -145,7 +145,7 @@ export function ConsensusVisualizer({
                 cy={CENTER}
                 r={RADIUS}
                 fill="none"
-                stroke="rgba(245,158,11,0.5)"
+                stroke="rgba(212,146,42,0.45)"
                 strokeWidth={2}
                 initial={{ scale: 0.3, opacity: 0.9 }}
                 animate={{ scale: 1.15, opacity: 0 }}
@@ -189,15 +189,15 @@ export function ConsensusVisualizer({
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.3 }}
             className={cn(
-              "font-mono text-sm tracking-wide",
-              failed ? "text-danger" : consensusReached ? "text-amber-400 glow-text" : "text-text-secondary"
+              "text-sm font-medium tracking-wide",
+              failed ? "text-danger" : consensusReached ? "text-amber-500" : "text-text-secondary"
             )}
           >
             {STATUS_COPY[status] ?? status}
           </motion.p>
         </AnimatePresence>
         {(votesCommitted !== undefined || votesRevealed !== undefined) && !failed && (
-          <p className="mt-1 font-mono text-xs text-text-muted">
+          <p className="mt-1 text-xs text-text-muted">
             {votesCommitted !== undefined && `${votesCommitted} committed`}
             {votesCommitted !== undefined && votesRevealed !== undefined && " · "}
             {votesRevealed !== undefined && `${votesRevealed} revealed`}
@@ -228,7 +228,7 @@ function ConsensusNode({
   delay?: number;
 }) {
   const radius = large ? 14 : 10;
-  const color = failed ? "#ef4444" : "#F59E0B";
+  const color = failed ? "#C62828" : "#D4922A";
 
   return (
     <g>
@@ -236,8 +236,8 @@ function ConsensusNode({
         cx={x}
         cy={y}
         r={radius}
-        fill={active ? color : "rgba(163,160,154,0.15)"}
-        stroke={active ? color : "rgba(163,160,154,0.3)"}
+        fill={active ? color : "#FFFFFF"}
+        stroke={active ? color : "rgba(23,23,28,0.18)"}
         strokeWidth={1.5}
         animate={
           active && !revealed

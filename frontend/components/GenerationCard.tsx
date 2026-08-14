@@ -40,7 +40,7 @@ export function GenerationCard({
       <AlignmentBadge alignment={entry.alignment} className="self-start" />
 
       <div className="mt-auto flex items-center justify-between gap-2 font-mono text-[10px] text-text-muted">
-        <span className="rounded-full bg-white/[0.03] px-2 py-0.5">#{entry.id}</span>
+        <span className="rounded-full bg-black/[0.04] px-2 py-0.5">#{entry.id}</span>
         <span>{isMine ? "You" : truncateAddress(entry.sender)}</span>
         {deployed ? (
           <span className="flex items-center gap-1 text-amber-400">
@@ -64,13 +64,13 @@ function ConfidenceRing({ value, passed }: { value: number; passed: boolean }) {
   return (
     <div className="relative flex h-9 w-9 shrink-0 items-center justify-center">
       <svg width={36} height={36} viewBox="0 0 36 36" className="-rotate-90">
-        <circle cx={18} cy={18} r={radius} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={3} />
+        <circle cx={18} cy={18} r={radius} fill="none" stroke="rgba(23,23,28,0.08)" strokeWidth={3} />
         <circle
           cx={18}
           cy={18}
           r={radius}
           fill="none"
-          stroke={passed ? "#F59E0B" : "#ef4444"}
+          stroke={passed ? "#D4922A" : "#C62828"}
           strokeWidth={3}
           strokeDasharray={circumference}
           strokeDashoffset={offset}

@@ -37,12 +37,12 @@ export function CodeViewer({
   }
 
   return (
-    <div className={cn("code-viewer overflow-hidden rounded-lg", className)}>
-      <div className="flex items-center justify-between border-b border-white/5 bg-white/[0.02] px-4 py-2.5">
-        <span className="font-mono text-xs text-text-muted">{filename ?? `contract.${language}`}</span>
+    <div className={cn("code-viewer deep-panel overflow-hidden !rounded-lg", className)}>
+      <div className="flex items-center justify-between border-b border-deep-border px-4 py-2.5">
+        <span className="font-mono text-xs text-deep-text-secondary">{filename ?? `contract.${language}`}</span>
         <button
           onClick={handleCopy}
-          className="flex items-center gap-1.5 rounded px-2 py-1 font-mono text-xs text-text-secondary transition-colors hover:bg-white/5 hover:text-amber-400"
+          className="flex items-center gap-1.5 rounded px-2 py-1 font-mono text-xs text-deep-text-secondary transition-colors hover:bg-white/5 hover:text-amber-400"
         >
           {copied ? <Check size={13} /> : <Copy size={13} />}
           {copied ? "Copied" : "Copy"}
@@ -52,7 +52,7 @@ export function CodeViewer({
         {html ? (
           <div dangerouslySetInnerHTML={{ __html: html }} />
         ) : (
-          <pre className="whitespace-pre-wrap text-text-secondary">{code}</pre>
+          <pre className="whitespace-pre-wrap text-deep-text-secondary">{code}</pre>
         )}
       </div>
     </div>
