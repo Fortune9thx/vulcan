@@ -222,18 +222,30 @@ export async function fetchDeployedAddress(
 
 /**
  * Terminal statuses after which polling should stop -- matches
- * genlayer-js's own DECIDED_STATES classification (minus ACCEPTED, which
- * this app deliberately keeps polling past: ACCEPTED can still be
- * appealed and reversed before FINALIZED, and stopping there hasn't been
- * verified safe against a read racing finalization). VALIDATORS_TIMEOUT
- * and LEADER_TIMEOUT are real terminal outcomes the SDK itself already
+ * genlayer-js's own DECIDED_STATES classification in full, including
+ * ACCEPTED. An earlier version deliberately excluded ACCEPTED here,
+ * reasoning it could still be appealed/reversed before FINALIZED and that
+ * stopping there hadn't been verified safe against a read racing
+ * finalization -- a real, live user report ("stuck after Consensus
+ * reached, nothing shows") forced actually checking that assumption
+ * instead of leaving it as an unverified caveat. Confirmed empirically:
+ * submitted a real generate() call, and get_generation() correctly
+ * returned the full record via the same genlayer-js readContract path the
+ * frontend uses, well before the transaction ever reached FINALIZED --
+ * which itself was observed taking several minutes past ACCEPTED on
+ * Bradbury (also confirmed directly, via a separate contract deploy this
+ * session). Waiting for FINALIZED wasn't a safety margin here, it was the
+ * entire cause of the stuck screen: FINALIZED settles the appeal window,
+ * it doesn't gate whether the write is readable. VALIDATORS_TIMEOUT and
+ * LEADER_TIMEOUT are real terminal outcomes the SDK itself already
  * classifies as decided -- omitting them here isn't a smaller polling
- * window, it's the caller ground through the full maxAttempts budget
+ * window, it's the caller grinding through the full maxAttempts budget
  * waiting for a status change that will never come, then surfacing a
  * generic "timed out waiting" error instead of the real, specific,
  * already-available reason.
  */
 const TERMINAL_STATUSES = new Set<TransactionStatus>([
+  TransactionStatus.ACCEPTED,
   TransactionStatus.FINALIZED,
   TransactionStatus.UNDETERMINED,
   TransactionStatus.CANCELED,
