@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
 import { useAccount } from "wagmi";
 import { createClient } from "genlayer-js";
 import { testnetBradbury } from "genlayer-js/chains";
@@ -13,12 +13,6 @@ import {
   parseGenerationRecord,
   parseGenerationIdList,
 } from "./vulcan-abi";
-
-declare global {
-  interface Window {
-    ethereum?: unknown;
-  }
-}
 
 let _readOnlyClient: GenLayerClient<GenLayerChain> | null = null;
 
@@ -39,18 +33,48 @@ export function useVulcanClient(): {
   client: GenLayerClient<GenLayerChain> | null;
   address: `0x${string}` | undefined;
 } {
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, connector } = useAccount();
+  const [client, setClient] = useState<GenLayerClient<GenLayerChain> | null>(null);
 
-  const client = useMemo(() => {
-    if (!isConnected || !address || typeof window === "undefined" || !window.ethereum) {
-      return null;
+  // Reading window.ethereum directly assumed the connected wallet is always
+  // the one injected provider a page happens to see -- true only for a
+  // single browser-extension wallet. Any other connector (WalletConnect,
+  // Coinbase Smart Wallet, Safe, or even a second installed extension
+  // shadowing window.ethereum) leaves wagmi's own useAccount() correctly
+  // reporting isConnected/address while this stayed null forever, so the
+  // UI showed "Connect your wallet" even with a wallet genuinely connected.
+  // connector.getProvider() returns whichever EIP-1193 provider wagmi
+  // actually established the connection through, matching every connector
+  // type instead of guessing at the global.
+  useEffect(() => {
+    let cancelled = false;
+    if (!isConnected || !address || !connector) {
+      setClient(null);
+      return;
     }
-    return createClient({
-      chain: testnetBradbury,
-      account: address,
-      provider: window.ethereum,
-    });
-  }, [isConnected, address]);
+    connector
+      .getProvider()
+      .then((provider) => {
+        if (cancelled) return;
+        setClient(
+          createClient({
+            chain: testnetBradbury,
+            account: address,
+            // wagmi's connector.getProvider() is typed as Promise<unknown> --
+            // it's a real EIP-1193 provider at runtime for every connector
+            // type, exactly the shape genlayer-js's createClient expects here.
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            provider: provider as any,
+          })
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setClient(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isConnected, address, connector]);
 
   return { client, address };
 }
