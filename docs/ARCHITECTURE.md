@@ -176,7 +176,7 @@ persisting.
 
 ## Contract addresses
 
-VULCAN has been deployed four times on Bradbury as the contract evolved
+VULCAN has been deployed five times on Bradbury as the contract evolved
 (contracts are immutable once deployed, so any logic change requires a
 fresh instance, not an upgrade):
 
@@ -187,12 +187,18 @@ fresh instance, not an upgrade):
 - `0x19b04aa76f241db4B645fCF5d332513a6D18f5A4` — after the independent-audit
   fixes below (AST-based structural validation, a str-only TreeMap rule,
   `mark_deployed` access control), superseded.
-- `0xEBFD0fb2431A4F114c0992E293ed05679028dd15` — current: adds the
-  independent alignment round, the `user_generations` personal index, and
-  `get_user_generations`. Live-verified end-to-end (see the consensus-flow
-  section above).
+- `0xEBFD0fb2431A4F114c0992E293ed05679028dd15` — adds the independent
+  alignment round, the `user_generations` personal index, and
+  `get_user_generations`, superseded.
+- `0xA7bE484beE1Ee5A83ffDFa370f2803F52605369F` — current: closes the
+  bare/`typing.List`/`typing.Dict` validator bypass found by the
+  independent adversarial contract review (see the Security audit section
+  above) — `_annotation_is_illegal_storage_type` previously only inspected
+  subscripted `list[...]`/`dict[...]` annotations, so this is a real fix to
+  the validator's core guarantee, not a cosmetic change. Live-verified: a
+  fresh `get_count()` read against the new address returns `0` as expected.
 
-All four are recorded in `contracts/addresses.json`; the frontend only
+All five are recorded in `contracts/addresses.json`; the frontend only
 ever talks to the current one via `NEXT_PUBLIC_VULCAN_CONTRACT_ADDRESS`.
 
 ## Security audit
