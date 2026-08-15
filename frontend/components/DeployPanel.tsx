@@ -58,9 +58,11 @@ export function DeployPanel({
         {state === "deploying" || state === "recording" ? (
           <div className="mt-6">
             <ConsensusVisualizer status={status} />
-            {state === "recording" && (
-              <p className="mt-2 font-mono text-xs text-text-muted">Recording deployment on Vulcan…</p>
-            )}
+            <p className="mt-2 text-xs text-text-muted">
+              {state === "recording" ? "Recording deployment on Vulcan…" : "Waiting for the deployment to finalize…"}
+              {" "}This can take a few minutes — VULCAN waits for full finalization, not just consensus, before
+              calling this done.
+            </p>
           </div>
         ) : (
           <div className="mt-6 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">

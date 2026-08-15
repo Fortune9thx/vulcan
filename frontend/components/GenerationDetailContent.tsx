@@ -115,11 +115,13 @@ export function GenerationDetailContent({
             )}
           </div>
         ) : state === "deploying" || state === "recording" ? (
-          <div className="flex flex-col items-center py-2">
+          <div className="flex flex-col items-center py-2 text-center">
             <ConsensusVisualizer status={status} />
-            {state === "recording" && (
-              <p className="mt-2 font-mono text-xs text-text-muted">Recording deployment on Vulcan…</p>
-            )}
+            <p className="mt-2 text-xs text-text-muted">
+              {state === "recording" ? "Recording deployment on Vulcan…" : "Waiting for the deployment to finalize…"}
+              {" "}This can take a few minutes — VULCAN waits for full finalization, not just consensus, before
+              calling this done.
+            </p>
           </div>
         ) : (
           <div className="flex flex-col gap-3">

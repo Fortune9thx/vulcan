@@ -253,6 +253,25 @@ const TERMINAL_STATUSES = new Set<TransactionStatus>([
   TransactionStatus.LEADER_TIMEOUT,
 ]);
 
+/**
+ * Used when a caller needs the stronger guarantee -- deployment and
+ * mark_deployed specifically, per GenLayer Portal steward review: showing
+ * "deployed successfully" the moment ACCEPTED is reached (reused from
+ * generate()'s polling, where it's correct -- see TERMINAL_STATUSES above)
+ * understates deployment's real claim. A generation record being readable
+ * at ACCEPTED is a read-only fact; "this contract is live and permanent"
+ * is a stronger claim that deserves waiting past the appeal window ACCEPTED
+ * can still be reversed within. Excludes ACCEPTED on purpose -- everything
+ * else is identical.
+ */
+const FINALIZED_REQUIRED_STATUSES = new Set<TransactionStatus>([
+  TransactionStatus.FINALIZED,
+  TransactionStatus.UNDETERMINED,
+  TransactionStatus.CANCELED,
+  TransactionStatus.VALIDATORS_TIMEOUT,
+  TransactionStatus.LEADER_TIMEOUT,
+]);
+
 export interface ConsensusTick {
   status: TransactionStatus;
   transaction: GenLayerTransaction;
@@ -288,15 +307,34 @@ export async function pollConsensusStatus(
   hash: `0x${string}`,
   onTick: (tick: ConsensusTick) => void,
   {
-    intervalMs = 1500,
-    maxAttempts = 120,
+    intervalMs,
+    maxAttempts,
     isCancelled = () => false,
-  }: { intervalMs?: number; maxAttempts?: number; isCancelled?: () => boolean } = {}
+    requireFinalized = false,
+  }: {
+    intervalMs?: number;
+    maxAttempts?: number;
+    isCancelled?: () => boolean;
+    /**
+     * Wait past ACCEPTED for FINALIZED specifically, per GenLayer Portal
+     * steward review -- see FINALIZED_REQUIRED_STATUSES above. FINALIZED
+     * was observed taking several minutes past ACCEPTED on Bradbury this
+     * session, so this also widens the default poll budget to match (the
+     * same ~100 attempts / 5s the GenLayer CLI's own `receipt` command
+     * defaults to for the identical wait) rather than reusing the ~3-minute
+     * budget tuned for the ACCEPTED case, which would otherwise trade the
+     * steward's requested correctness fix for a new, spurious timeout.
+     */
+    requireFinalized?: boolean;
+  } = {}
 ): Promise<GenLayerTransaction> {
+  const terminalStatuses = requireFinalized ? FINALIZED_REQUIRED_STATUSES : TERMINAL_STATUSES;
+  const effectiveIntervalMs = intervalMs ?? (requireFinalized ? 5000 : 1500);
+  const effectiveMaxAttempts = maxAttempts ?? (requireFinalized ? 100 : 120);
   let lastStatus: TransactionStatus | null = null;
   let consecutiveFailures = 0;
 
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+  for (let attempt = 0; attempt < effectiveMaxAttempts; attempt++) {
     if (isCancelled()) throw new PollCancelledError();
 
     let transaction: GenLayerTransaction;
@@ -306,7 +344,7 @@ export async function pollConsensusStatus(
     } catch (err) {
       consecutiveFailures += 1;
       if (consecutiveFailures > MAX_CONSECUTIVE_RPC_FAILURES) throw err;
-      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+      await new Promise((resolve) => setTimeout(resolve, effectiveIntervalMs));
       continue;
     }
 
@@ -317,13 +355,17 @@ export async function pollConsensusStatus(
       lastStatus = status;
     }
 
-    if (TERMINAL_STATUSES.has(status)) {
+    if (terminalStatuses.has(status)) {
       return transaction;
     }
 
     if (isCancelled()) throw new PollCancelledError();
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    await new Promise((resolve) => setTimeout(resolve, effectiveIntervalMs));
   }
 
-  throw new Error("Timed out waiting for transaction to reach a terminal status");
+  throw new Error(
+    requireFinalized
+      ? "Timed out waiting for the transaction to finalize."
+      : "Timed out waiting for transaction to reach a terminal status"
+  );
 }
