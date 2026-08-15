@@ -52,6 +52,8 @@ jobs:
         working-directory: frontend
         run: pnpm lint
 
-      - name: Type check
+      - name: Build (includes Next.js's own type check)
         working-directory: frontend
-        run: pnpm exec tsc --noEmit
+        env:
+          NEXT_PUBLIC_VULCAN_CONTRACT_ADDRESS: "0xA7bE484beE1Ee5A83ffDFa370f2803F52605369F"
+        run: pnpm build
