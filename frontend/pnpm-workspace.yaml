@@ -10,6 +10,22 @@ allowBuilds:
   bufferutil: false
   keccak: false
   utf-8-validate: false
+  # sharp: Next's optional native image-optimization backend. No
+  # component uses next/image (confirmed during the security audit --
+  # only the auto-generated next-env.d.ts reference exists), so there's
+  # nothing to accelerate; denying it matches the same "don't run a
+  # third-party native build for a feature this app doesn't use" reasoning
+  # as the three above. Left as an unreachable, accepted pnpm-audit finding
+  # elsewhere in this file's history for the same reason.
+  sharp: false
+  # unrs-resolver: NOT unused -- confirmed via `pnpm why` a real,
+  # load-bearing dependency of eslint-import-resolver-typescript, which
+  # eslint-config-next actually uses. Denying this one (as first attempted
+  # in CI, where a clean checkout has no cached local approval unlike this
+  # machine) broke `pnpm install --frozen-lockfile` outright with
+  # ERR_PNPM_IGNORED_BUILDS, since pnpm treats an undecided build as
+  # blocking, not just skipped. Allowed, not denied, on purpose.
+  unrs-resolver: true
 # Security-audit dependency pins: force safe patch versions of packages
 # that are only ever pulled in transitively (wagmi/rainbowkit's wallet
 # connector stack, Next's CSS pipeline) but resolve to a range with a
